@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String
+  profilePicture  String?
+  oauthProvider   String    // 'google' | 'apple'
+  oauthId         String    @unique
+  createdAt       DateTime  @default(now())
+  lastActiveAt    DateTime  @default(now())
+  
+  // Relations
+  createdHavrutot Havruta[] @relation("HavrutaCreator")
+  participantIn   HavrutaParticipant[]
+  progress        Progress[]
+  sessions        SessionParticipant[]
+  
+  @@map("users")
+}
+
+model Havruta {
+  id             String    @id @default(cuid())
+  name           String
+  bookId         String
+  bookTitle      String
+  currentSection String    @default("")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  lastStudiedAt  DateTime?
+  totalSessions  Int       @default(0)
+  
+  // Relations
+  creatorId      String
+  creator        User      @relation("HavrutaCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  participants   HavrutaParticipant[]
+  sessions       Session[]
+  progress       Progress[]
+  
+  @@map("havrutot")
+}
+
+model HavrutaParticipant {
+  id        String   @id @default(cuid())
+  joinedAt  DateTime @default(now())
+  
+  // Relations
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  havrutaId String
+  havruta   Havruta  @relation(fields: [havrutaId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, havrutaId])
+  @@map("havruta_participants")
+}
+
+model Session {
+  id              String     @id @default(cuid())
+  startTime       DateTime
+  endTime         DateTime?
+  sectionsStudied String[]   @default([])
+  isRecurring     Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  
+  // Relations
+  havrutaId            String
+  havruta              Havruta               @relation(fields: [havrutaId], references: [id], onDelete: Cascade)
+  participants         SessionParticipant[]
+  recurrencePatternId  String?
+  recurrencePattern    RecurrencePattern?    @relation(fields: [recurrencePatternId], references: [id], onDelete: SetNull)
+  
+  @@map("sessions")
+}
+
+model SessionParticipant {
+  id        String   @id @default(cuid())
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+  
+  // Relations
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, sessionId])
+  @@map("session_participants")
+}
+
+model RecurrencePattern {
+  id          String    @id @default(cuid())
+  frequency   String    // 'once' | 'daily' | 'weekly' | 'bi-weekly' | 'monthly'
+  interval    Int       @default(1)
+  endDate     DateTime?
+  daysOfWeek  Int[]     @default([]) // For weekly patterns: [0=Sunday, 1=Monday, ..., 6=Saturday]
+  createdAt   DateTime  @default(now())
+  
+  // Relations
+  sessions    Session[]
+  
+  @@map("recurrence_patterns")
+}
+
+model Progress {
+  id                String   @id @default(cuid())
+  sectionsCompleted String[] @default([])
+  lastSection       String   @default("")
+  totalTimeStudied  Int      @default(0) // in minutes
+  updatedAt         DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  havrutaId         String
+  havruta           Havruta  @relation(fields: [havrutaId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, havrutaId])
+  @@map("progress")
+}

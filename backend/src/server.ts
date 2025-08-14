@@ -7,6 +7,8 @@ import { Server } from 'socket.io'
 import dotenv from 'dotenv'
 import passport from './config/passport'
 import { prisma } from './utils/database'
+import { WebSocketService } from './services/websocketService'
+import { SyncService } from './services/syncService'
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
 import havrutotRoutes from './routes/havrutot'
@@ -72,14 +74,18 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id)
-  
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id)
-  })
-})
+// Initialize WebSocket and Sync services
+const websocketService = new WebSocketService(io)
+const syncService = new SyncService(websocketService)
+
+// Set sync service reference in websocket service
+websocketService.setSyncService(syncService)
+
+// Cleanup inactive rooms and sync data every 30 minutes
+setInterval(() => {
+  websocketService.cleanupInactiveRooms(60)
+  syncService.cleanupInactiveSessions()
+}, 30 * 60 * 1000)
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)

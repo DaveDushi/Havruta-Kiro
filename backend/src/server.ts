@@ -9,6 +9,8 @@ import passport from './config/passport'
 import { prisma } from './utils/database'
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
+import havrutotRoutes from './routes/havrutot'
+import sessionRoutes from './routes/sessions'
 
 // Load environment variables
 dotenv.config()
@@ -47,6 +49,8 @@ app.use(passport.initialize())
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/havrutot', havrutotRoutes)
+app.use('/api/sessions', sessionRoutes)
 
 // Basic health check route
 app.get('/api/health', async (_req, res) => {

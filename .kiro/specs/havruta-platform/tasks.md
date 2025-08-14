@@ -49,22 +49,33 @@
   - Write integration tests for user API endpoints
   - _Requirements: 1.1, 1.3_
 
-- [ ] 5. Implement Sefaria API integration service
+- [x] 5. Implement Sefaria API integration service
+
+
+
+
   - Create SefariaService class with methods for getText, getIndex, and getTextStructure
   - Implement HTTP client with error handling and retry logic
   - Add caching layer for frequently accessed texts
   - Write unit tests with mocked Sefaria API responses
   - _Requirements: 4.1, 4.3, 4.4_
 
-- [ ] 6. Build Havruta session management
-- [ ] 6.1 Create Havruta CRUD operations
+- [x] 6. Build Havruta session management
+
+
+
+- [x] 6.1 Create Havruta CRUD operations
+
+
   - Implement HavrutaService with create, join, and state management methods
   - Build REST endpoints for Havruta creation and participant management
   - Add validation for participant limits and permissions
   - Write unit tests for Havruta service methods
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 6.2 Implement session state management
+- [x] 6.2 Implement session state management
+
+
   - Create session initialization and cleanup logic
   - Build progress tracking and automatic saving functionality
   - Implement session participant management (join/leave)

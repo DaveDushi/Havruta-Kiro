@@ -24,17 +24,17 @@ router.get('/google/callback',
   (req, res) => {
     try {
       if (!req.user) {
-        return res.redirect(`${process.env.FRONTEND_URL}/auth/error?message=Authentication failed`)
+        return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`)
       }
 
       // Generate JWT token
       const token = authService.generateJWT(req.user as any)
 
-      // Redirect to frontend with token
-      res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`)
+      // Redirect to frontend callback page with token
+      res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}&refreshToken=${token}`)
     } catch (error) {
       console.error('OAuth callback error:', error)
-      res.redirect(`${process.env.FRONTEND_URL}/auth/error?message=Authentication failed`)
+      res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`)
     }
   }
 )

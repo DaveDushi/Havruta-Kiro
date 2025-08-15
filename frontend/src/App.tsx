@@ -3,8 +3,9 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { AuthProvider } from './contexts/AuthContext'
 import { AppProvider } from './contexts/AppContext'
+import { CollaborativeNavigationProvider } from './contexts/CollaborativeNavigationContext'
 import { Layout, ProtectedRoute } from './components'
-import { LoginPage, DashboardPage, ProfilePage, OAuthCallbackPage, AuthSuccessPage } from './pages'
+import { LoginPage, DashboardPage, ProfilePage, OAuthCallbackPage, AuthSuccessPage, TextViewerPage } from './pages'
 
 const theme = createTheme({
   palette: {
@@ -36,7 +37,8 @@ function App() {
       <CssBaseline />
       <AuthProvider>
         <AppProvider>
-          <Router>
+          <CollaborativeNavigationProvider>
+            <Router>
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<LoginPage />} />
@@ -64,6 +66,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/study/:bookTitle"
+                element={
+                  <ProtectedRoute>
+                    <TextViewerPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Default redirect */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -72,6 +82,7 @@ function App() {
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Router>
+          </CollaborativeNavigationProvider>
         </AppProvider>
       </AuthProvider>
     </ThemeProvider>

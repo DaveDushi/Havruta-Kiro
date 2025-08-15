@@ -18,6 +18,8 @@ import {
   Select,
   InputAdornment,
   IconButton,
+  Alert,
+  Snackbar,
 } from '@mui/material'
 import { 
   Add, 
@@ -31,70 +33,41 @@ import {
   PersonAdd,
 } from '@mui/icons-material'
 import { useAuth } from '../contexts/AuthContext'
+import { useDashboardData } from '../hooks/useDashboardData'
+import { Havruta } from '../types'
+import { useNavigate } from 'react-router-dom'
 
 const DashboardPage: React.FC = () => {
   const { state: authState } = useAuth()
+  const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const [isLoading, setIsLoading] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState('')
   const [filterStatus, setFilterStatus] = React.useState<'all' | 'active' | 'inactive'>('all')
   const [sortBy, setSortBy] = React.useState<'name' | 'lastStudied' | 'sessions'>('lastStudied')
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc')
+  const [snackbar, setSnackbar] = React.useState<{
+    open: boolean
+    message: string
+    severity: 'success' | 'error' | 'info'
+  }>({ open: false, message: '', severity: 'info' })
 
-  // Mock data for development
-  const mockHavrutot = [
-    {
-      id: '1',
-      name: 'Genesis Study Group',
-      bookTitle: 'Genesis',
-      bookId: 'genesis',
-      creatorId: authState.user?.id || '',
-      participants: ['user1', 'user2'],
-      currentSection: 'Genesis 1:1',
-      isActive: true,
-      createdAt: new Date(),
-      lastStudiedAt: new Date(),
-      totalSessions: 5,
-    },
-    {
-      id: '2',
-      name: 'Talmud Bavli',
-      bookTitle: 'Berakhot',
-      bookId: 'berakhot',
-      creatorId: authState.user?.id || '',
-      participants: ['user1', 'user3'],
-      currentSection: 'Berakhot 2a',
-      isActive: false,
-      createdAt: new Date(),
-      lastStudiedAt: new Date(Date.now() - 86400000), // Yesterday
-      totalSessions: 12,
-    },
-    {
-      id: '3',
-      name: 'Mishnah Study Circle',
-      bookTitle: 'Pirkei Avot',
-      bookId: 'pirkei-avot',
-      creatorId: 'user2',
-      participants: ['user1', 'user2', 'user4'],
-      currentSection: 'Avot 1:1',
-      isActive: true,
-      createdAt: new Date(Date.now() - 7 * 86400000), // 1 week ago
-      lastStudiedAt: new Date(Date.now() - 2 * 86400000), // 2 days ago
-      totalSessions: 8,
-    },
-  ]
-
-  const mockNextSession = {
-    id: '1',
-    name: 'Genesis Study Group',
-    scheduledTime: new Date(Date.now() + 3600000), // 1 hour from now
-    currentSection: 'Genesis 1:1',
-  }
+  // Use the dashboard data hook
+  const {
+    havrutot,
+    nextSession,
+    statistics,
+    isLoading,
+    error,
+    refetch,
+    joinHavruta,
+    scheduleSession,
+    createHavruta,
+  } = useDashboardData()
 
   // Filter and sort Havrutot
   const filteredAndSortedHavrutot = React.useMemo(() => {
-    let filtered = mockHavrutot.filter(havruta => {
+    let filtered = havrutot.filter(havruta => {
       const matchesSearch = havruta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            havruta.bookTitle.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = filterStatus === 'all' || 
@@ -110,7 +83,7 @@ const DashboardPage: React.FC = () => {
           comparison = a.name.localeCompare(b.name)
           break
         case 'lastStudied':
-          comparison = a.lastStudiedAt.getTime() - b.lastStudiedAt.getTime()
+          comparison = new Date(a.lastStudiedAt).getTime() - new Date(b.lastStudiedAt).getTime()
           break
         case 'sessions':
           comparison = a.totalSessions - b.totalSessions
@@ -120,21 +93,72 @@ const DashboardPage: React.FC = () => {
     })
 
     return filtered
-  }, [mockHavrutot, searchTerm, filterStatus, sortBy, sortOrder])
+  }, [havrutot, searchTerm, filterStatus, sortBy, sortOrder])
 
-  const handleCreateHavruta = () => {
-    console.log('Create new Havruta')
-    // TODO: Implement create havruta functionality
+  const handleCreateHavruta = async () => {
+    try {
+      await createHavruta()
+      setSnackbar({
+        open: true,
+        message: 'Havruta creation dialog would open here',
+        severity: 'info'
+      })
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to create Havruta',
+        severity: 'error'
+      })
+    }
   }
 
-  const handleJoinHavruta = (havrutaId: string) => {
-    console.log(`Join havruta ${havrutaId}`)
-    // TODO: Implement join havruta functionality
+  const handleJoinHavruta = async (havrutaId: string) => {
+    try {
+      const havruta = havrutot.find(h => h.id === havrutaId)
+      if (havruta) {
+        // For now, skip backend session join and go directly to TextViewer
+        // TODO: Implement proper session management later
+        
+        // Navigate to TextViewer with collaborative mode enabled
+        const params = new URLSearchParams({
+          sessionId: `session-${havrutaId}`,
+          collaborative: 'true',
+          ref: havruta.currentSection
+        })
+        const url = `/study/${encodeURIComponent(havruta.bookTitle)}?${params.toString()}`
+        console.log('Navigating to:', url)
+        navigate(url)
+        
+        setSnackbar({
+          open: true,
+          message: 'Successfully joined Havruta session!',
+          severity: 'success'
+        })
+      }
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to join Havruta session',
+        severity: 'error'
+      })
+    }
   }
 
-  const handleScheduleSession = (havrutaId: string) => {
-    console.log(`Schedule havruta ${havrutaId}`)
-    // TODO: Implement schedule session functionality
+  const handleScheduleSession = async (havrutaId: string) => {
+    try {
+      await scheduleSession(havrutaId)
+      setSnackbar({
+        open: true,
+        message: 'Session scheduled successfully!',
+        severity: 'success'
+      })
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to schedule session',
+        severity: 'error'
+      })
+    }
   }
 
   const handleInviteParticipant = (havrutaId: string) => {
@@ -144,6 +168,10 @@ const DashboardPage: React.FC = () => {
 
   const toggleSortOrder = () => {
     setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+  }
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }))
   }
 
   if (isLoading) {
@@ -183,23 +211,41 @@ const DashboardPage: React.FC = () => {
             Continue your learning journey with your study partners
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          size={isMobile ? 'large' : 'medium'}
-          startIcon={<Add />}
-          onClick={handleCreateHavruta}
-          sx={{ minWidth: isMobile ? '100%' : 'auto' }}
-        >
-          New Havruta
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
+          <Button
+            variant="outlined"
+            size={isMobile ? 'large' : 'medium'}
+            startIcon={<MenuBook />}
+            onClick={() => navigate('/study/Genesis?ref=Genesis%201:1')}
+            sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+          >
+            Test TextViewer
+          </Button>
+          <Button
+            variant="contained"
+            size={isMobile ? 'large' : 'medium'}
+            startIcon={<Add />}
+            onClick={handleCreateHavruta}
+            sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+          >
+            New Havruta
+          </Button>
+        </Box>
       </Box>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => refetch()}>
+          {error}
+        </Alert>
+      )}
 
       {/* Quick Stats */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="primary" gutterBottom>
-              {mockHavrutot.length}
+              {statistics.totalHavrutot}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Total Havrutot
@@ -209,7 +255,7 @@ const DashboardPage: React.FC = () => {
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="primary" gutterBottom>
-              {mockHavrutot.reduce((sum, h) => sum + h.totalSessions, 0)}
+              {statistics.totalSessions}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Total Sessions
@@ -219,17 +265,17 @@ const DashboardPage: React.FC = () => {
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="primary" gutterBottom>
-              {mockHavrutot.filter(h => h.isActive).length}
+              {statistics.activeHavrutot}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Active Sessions
+              Active Havrutot
             </Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h4" color="primary" gutterBottom>
-              {new Set(mockHavrutot.flatMap(h => h.participants)).size}
+              {statistics.totalStudyPartners}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Study Partners
@@ -239,7 +285,7 @@ const DashboardPage: React.FC = () => {
       </Grid>
 
       {/* Next Up Section */}
-      {mockNextSession && (
+      {nextSession && (
         <Box sx={{ mb: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Schedule color="primary" />
@@ -258,20 +304,20 @@ const DashboardPage: React.FC = () => {
               >
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="h6" gutterBottom>
-                    {mockNextSession.name}
+                    {nextSession.name}
                   </Typography>
                   <Typography color="text.secondary" gutterBottom>
-                    Scheduled for {mockNextSession.scheduledTime.toLocaleString()}
+                    Scheduled for {nextSession.scheduledTime.toLocaleString()}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Continue from {mockNextSession.currentSection}
+                    Continue from {nextSession.currentSection}
                   </Typography>
                 </Box>
                 <Button
                   variant="contained"
                   size="large"
                   startIcon={<PlayArrow />}
-                  onClick={() => handleJoinHavruta(mockNextSession.id)}
+                  onClick={() => handleJoinHavruta(nextSession.id)}
                   sx={{ minWidth: isMobile ? '100%' : 'auto' }}
                 >
                   Join Session
@@ -401,7 +447,7 @@ const DashboardPage: React.FC = () => {
                   </Box>
                   
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Last studied: {havruta.lastStudiedAt.toLocaleDateString()}
+                    Last studied: {new Date(havruta.lastStudiedAt).toLocaleDateString()}
                   </Typography>
                 </CardContent>
                 
@@ -414,16 +460,22 @@ const DashboardPage: React.FC = () => {
                       onClick={() => handleJoinHavruta(havruta.id)}
                       sx={{ flex: 1, minWidth: 'fit-content' }}
                     >
-                      Join
+                      Join Collaborative
                     </Button>
                     <Button
                       variant="outlined"
                       size="small"
-                      startIcon={<Schedule />}
-                      onClick={() => handleScheduleSession(havruta.id)}
+                      startIcon={<MenuBook />}
+                      onClick={() => {
+                        // Navigate to TextViewer in solo mode
+                        const params = new URLSearchParams({
+                          ref: havruta.currentSection
+                        })
+                        navigate(`/study/${havruta.bookTitle}?${params.toString()}`)
+                      }}
                       sx={{ flex: 1, minWidth: 'fit-content' }}
                     >
-                      Schedule
+                      Study Solo
                     </Button>
                     <IconButton
                       size="small"
@@ -442,15 +494,15 @@ const DashboardPage: React.FC = () => {
         <Paper sx={{ textAlign: 'center', py: 8, px: 4 }}>
           <MenuBook sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {mockHavrutot.length === 0 ? 'No Havrutot yet' : 'No Havrutot match your filters'}
+            {havrutot.length === 0 ? 'No Havrutot yet' : 'No Havrutot match your filters'}
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
-            {mockHavrutot.length === 0 
+            {havrutot.length === 0 
               ? 'Create your first Havruta to start studying Jewish texts with partners in real-time collaborative sessions'
               : 'Try adjusting your search or filter criteria to find your Havrutot'
             }
           </Typography>
-          {mockHavrutot.length === 0 ? (
+          {havrutot.length === 0 ? (
             <Button
               variant="contained"
               size="large"
@@ -473,6 +525,22 @@ const DashboardPage: React.FC = () => {
           )}
         </Paper>
       )}
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

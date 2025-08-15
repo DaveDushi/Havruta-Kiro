@@ -62,3 +62,127 @@ export interface Progress {
   totalTimeStudied: number
   updatedAt: Date
 }
+
+// Sefaria types
+export interface SefariaText {
+  ref: string
+  heRef: string
+  text: string[]
+  he: string[]
+  versions: SefariaVersion[]
+  textDepth: number
+  sectionNames: string[]
+  addressTypes: string[]
+}
+
+export interface SefariaVersion {
+  title: string
+  versionTitle: string
+  versionSource: string
+  language: string
+}
+
+export interface SefariaIndex {
+  title: string
+  heTitle: string
+  categories: string[]
+  primary_category: string
+  enDesc?: string
+  heDesc?: string
+  compDate?: string
+  compPlace?: string
+  pubDate?: string
+  pubPlace?: string
+  era?: string
+}
+
+export interface SefariaTextStructure {
+  title: string
+  heTitle: string
+  titleVariants: string[]
+  sectionNames: string[]
+  addressTypes: string[]
+  depth: number
+  textDepth: number
+  lengths: number[]
+  schema: any
+}
+
+export interface SefariaSearchResult {
+  ref: string
+  heRef: string
+  text: string
+  he: string
+  version: string
+  lang: string
+}
+
+export interface SefariaLink {
+  ref: string
+  heRef: string
+  anchorRef: string
+  anchorHeRef: string
+  type: string
+  category: string
+}
+
+// Text viewer types
+export interface TextSection {
+  ref: string
+  heRef: string
+  text: string[]
+  he: string[]
+  sectionIndex: number
+  chapterIndex?: number
+  verseIndex?: number
+}
+
+export interface TextNavigation {
+  currentRef: string
+  availableSections: string[]
+  hasNext: boolean
+  hasPrevious: boolean
+  nextRef?: string
+  previousRef?: string
+}
+
+export interface SearchHighlight {
+  text: string
+  startIndex: number
+  endIndex: number
+  ref: string
+}
+
+// Collaborative navigation types
+export interface ParticipantPosition {
+  userId: string
+  userName: string
+  currentRef: string
+  timestamp: Date
+  isActive: boolean
+}
+
+export interface NavigationEvent {
+  sessionId: string
+  userId: string
+  userName: string
+  newRef: string
+  timestamp: Date
+}
+
+export interface NavigationConflict {
+  sessionId: string
+  conflictingRefs: Array<{
+    ref: string
+    participants: Array<{ userId: string, userName: string }>
+  }>
+  timestamp: Date
+}
+
+export interface CollaborativeState {
+  isConnected: boolean
+  sessionId: string | null
+  participants: ParticipantPosition[]
+  currentConflict: NavigationConflict | null
+  isNavigationLocked: boolean
+}

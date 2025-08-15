@@ -15,6 +15,7 @@ import userRoutes from './routes/users'
 import havrutotRoutes from './routes/havrutot'
 import sessionRoutes from './routes/sessions'
 import schedulingRoutes from './routes/scheduling'
+import sefariaRoutes from './routes/sefaria'
 
 // Load environment variables
 dotenv.config()
@@ -56,20 +57,21 @@ app.use('/api/users', userRoutes)
 app.use('/api/havrutot', havrutotRoutes)
 app.use('/api/sessions', sessionRoutes)
 app.use('/api/scheduling', schedulingRoutes)
+app.use('/api/sefaria', sefariaRoutes)
 
 // Basic health check route
 app.get('/api/health', async (_req, res) => {
   try {
     // Check database connection
     await prisma.$queryRaw`SELECT 1`
-    res.json({ 
-      status: 'ok', 
+    res.json({
+      status: 'ok',
       timestamp: new Date().toISOString(),
       database: 'connected'
     })
   } catch (error) {
-    res.status(503).json({ 
-      status: 'error', 
+    res.status(503).json({
+      status: 'error',
       timestamp: new Date().toISOString(),
       database: 'disconnected',
       error: 'Database connection failed'

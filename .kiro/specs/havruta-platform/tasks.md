@@ -182,15 +182,28 @@
   - Write integration tests for dashboard interactions
   - _Requirements: 6.1, 6.2, 6.3_
 
-- [ ] 11. Create text study interface
-- [ ] 11.1 Build text viewer component
+- [-] 11. Create text study interface
+
+
+- [x] 11.1 Build text viewer component
+
+
+
+
+
+
+
   - Create responsive text display component for Hebrew and English
   - Implement text navigation controls and section jumping
   - Add text search and highlighting functionality
   - Write unit tests for text viewer interactions
   - _Requirements: 4.1, 4.2_
 
-- [ ] 11.2 Implement collaborative text navigation
+- [x] 11.2 Implement collaborative text navigation
+
+
+
+
   - Connect text viewer to real-time synchronization
   - Build participant cursor/position indicators
   - Add navigation conflict resolution UI
@@ -198,14 +211,24 @@
   - _Requirements: 3.3, 4.2_
 
 - [ ] 12. Integrate WebRTC video calling
-- [ ] 12.1 Implement video call initialization
+
+
+
+
+
+
+- [x] 12.1 Implement video call initialization
+
+
   - Create WebRTC peer connection management
   - Build video call UI components with controls
   - Implement automatic call start when joining sessions
   - Write unit tests for video call setup
   - _Requirements: 5.1, 5.2, 5.4_
 
-- [ ] 12.2 Add video call features and fallbacks
+- [x] 12.2 Add video call features and fallbacks
+
+
   - Implement audio-only mode toggle
   - Add call quality indicators and connection status
   - Build error handling and reconnection logic

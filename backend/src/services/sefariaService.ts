@@ -61,7 +61,7 @@ export class SefariaService {
       return cached
     }
 
-    const data = await this.makeRequestWithRetry<SefariaIndex[]>('/v2/index')
+    const data = await this.makeRequestWithRetry<SefariaIndex[]>('/index')
     this.setCache(cacheKey, data, this.defaultTtl * 2) // Cache index for longer
     
     return data
@@ -83,7 +83,7 @@ export class SefariaService {
     }
 
     const encodedRef = encodeURIComponent(ref)
-    const data = await this.makeRequestWithRetry<SefariaText>(`/v3/texts/${encodedRef}`)
+    const data = await this.makeRequestWithRetry<SefariaText>(`/texts/${encodedRef}`)
     this.setCache(cacheKey, data)
     
     return data
@@ -105,7 +105,7 @@ export class SefariaService {
     }
 
     const encodedTitle = encodeURIComponent(title)
-    const data = await this.makeRequestWithRetry<SefariaTextStructure>(`/v2/index/${encodedTitle}`)
+    const data = await this.makeRequestWithRetry<SefariaTextStructure>(`/index/titles/${encodedTitle}`)
     this.setCache(cacheKey, data, this.defaultTtl * 2) // Cache structure for longer
     
     return data

@@ -83,6 +83,14 @@ graph TB
   - `createNewHavruta()`
   - `joinHavruta(sessionId: string)`
   - `scheduleSession()`
+  - `inviteParticipants(havrutaId: string, emails: string[])`
+
+#### Participant Invitation Dialog Component
+- **Purpose:** Handle email-based participant invitations
+- **Key Methods:**
+  - `validateEmails(emails: string[])`
+  - `sendInvitations(havrutaId: string, emails: string[])`
+  - `handleInvitationResponse()`
 
 #### Havruta Session Component
 - **Purpose:** Main collaborative study interface
@@ -117,6 +125,31 @@ interface HavrutaService {
   joinHavruta(userId: string, sessionId: string): Promise<void>
   getHavrutaState(sessionId: string): Promise<HavrutaState>
   updateProgress(sessionId: string, section: string): Promise<void>
+  inviteParticipants(havrutaId: string, emails: string[]): Promise<InvitationResult>
+}
+```
+
+#### Email Service
+```typescript
+interface EmailService {
+  sendHavrutaInvitation(email: string, havrutaDetails: HavrutaInvitation): Promise<void>
+  validateEmailFormat(email: string): boolean
+  checkExistingUser(email: string): Promise<User | null>
+}
+
+interface HavrutaInvitation {
+  havrutaId: string
+  havrutaName: string
+  bookTitle: string
+  inviterName: string
+  joinLink: string
+}
+
+interface InvitationResult {
+  successful: string[]
+  failed: { email: string; reason: string }[]
+  existingUsers: string[]
+  newUsers: string[]
 }
 ```
 
@@ -244,6 +277,21 @@ interface Progress {
 }
 ```
 
+### Invitation Model
+```typescript
+interface Invitation {
+  id: string
+  havrutaId: string
+  inviterUserId: string
+  inviteeEmail: string
+  status: 'pending' | 'accepted' | 'declined' | 'expired'
+  invitationToken: string
+  createdAt: Date
+  expiresAt: Date
+  acceptedAt?: Date
+}
+```
+
 ## Error Handling
 
 ### Client-Side Error Handling
@@ -251,12 +299,16 @@ interface Progress {
 - **Authentication Errors:** Redirect to login page and clear invalid tokens
 - **Video Call Errors:** Provide fallback to audio-only mode and connection retry
 - **Synchronization Errors:** Implement conflict resolution for concurrent navigation
+- **Email Validation Errors:** Provide real-time feedback for invalid email formats
+- **Invitation Errors:** Display clear error messages for failed invitations with retry options
 
 ### Server-Side Error Handling
 - **Database Errors:** Log errors and return appropriate HTTP status codes
 - **External API Errors:** Implement circuit breaker pattern for Sefaria API calls
 - **WebSocket Errors:** Handle connection drops and implement reconnection logic
 - **Authentication Errors:** Return standardized error responses with clear messages
+- **Email Service Errors:** Implement retry logic for failed email sends with exponential backoff
+- **Invitation Token Errors:** Handle expired or invalid invitation tokens gracefully
 
 ### Error Response Format
 ```typescript

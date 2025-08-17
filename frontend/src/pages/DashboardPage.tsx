@@ -34,8 +34,12 @@ import {
 } from '@mui/icons-material'
 import { useAuth } from '../contexts/AuthContext'
 import { useDashboardData } from '../hooks/useDashboardData'
+import { havrutaService } from '../services/havrutaService'
+import { CreateHavrutaDialog } from '../components/CreateHavrutaDialog'
+import { ParticipantInvitationDialog } from '../components/ParticipantInvitationDialog'
 import { Havruta } from '../types'
 import { useNavigate } from 'react-router-dom'
+import { testLogin, isTestMode } from '../utils/testAuth'
 
 const DashboardPage: React.FC = () => {
   const { state: authState } = useAuth()
@@ -51,6 +55,9 @@ const DashboardPage: React.FC = () => {
     message: string
     severity: 'success' | 'error' | 'info'
   }>({ open: false, message: '', severity: 'info' })
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const [invitationDialogOpen, setInvitationDialogOpen] = React.useState(false)
+  const [selectedHavrutaForInvitation, setSelectedHavrutaForInvitation] = React.useState<Havruta | null>(null)
 
   // Use the dashboard data hook
   const {
@@ -95,18 +102,32 @@ const DashboardPage: React.FC = () => {
     return filtered
   }, [havrutot, searchTerm, filterStatus, sortBy, sortOrder])
 
-  const handleCreateHavruta = async () => {
+  const handleCreateHavruta = () => {
+    setCreateDialogOpen(true)
+  }
+
+  const handleCreateHavrutaSuccess = () => {
+    setSnackbar({
+      open: true,
+      message: 'Havruta created successfully!',
+      severity: 'success'
+    })
+  }
+
+  const handleTestLogin = async () => {
     try {
-      await createHavruta()
+      const result = await testLogin()
       setSnackbar({
         open: true,
-        message: 'Havruta creation dialog would open here',
-        severity: 'info'
+        message: `Test login successful! Logged in as ${result.user.name}`,
+        severity: 'success'
       })
+      // Refresh the page to update auth state
+      window.location.reload()
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to create Havruta',
+        message: 'Test login failed. Make sure backend is running and test user exists.',
         severity: 'error'
       })
     }
@@ -162,8 +183,21 @@ const DashboardPage: React.FC = () => {
   }
 
   const handleInviteParticipant = (havrutaId: string) => {
-    console.log(`Invite participant to havruta ${havrutaId}`)
-    // TODO: Implement invite participant functionality
+    const havruta = havrutot.find(h => h.id === havrutaId)
+    if (havruta) {
+      setSelectedHavrutaForInvitation(havruta)
+      setInvitationDialogOpen(true)
+    }
+  }
+
+  const handleSendInvitations = async (havrutaId: string, emails: string[]) => {
+    try {
+      const result = await havrutaService.inviteParticipants(havrutaId, emails)
+      return result
+    } catch (error) {
+      console.error('Error sending invitations:', error)
+      throw error
+    }
   }
 
   const toggleSortOrder = () => {
@@ -212,6 +246,16 @@ const DashboardPage: React.FC = () => {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
+          {isTestMode() && (
+            <Button
+              variant="outlined"
+              size={isMobile ? 'large' : 'medium'}
+              onClick={handleTestLogin}
+              sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+            >
+              Test Login
+            </Button>
+          )}
           <Button
             variant="outlined"
             size={isMobile ? 'large' : 'medium'}
@@ -465,25 +509,12 @@ const DashboardPage: React.FC = () => {
                     <Button
                       variant="outlined"
                       size="small"
-                      startIcon={<MenuBook />}
-                      onClick={() => {
-                        // Navigate to TextViewer in solo mode
-                        const params = new URLSearchParams({
-                          ref: havruta.currentSection
-                        })
-                        navigate(`/study/${havruta.bookTitle}?${params.toString()}`)
-                      }}
+                      startIcon={<PersonAdd />}
+                      onClick={() => handleInviteParticipant(havruta.id)}
                       sx={{ flex: 1, minWidth: 'fit-content' }}
                     >
-                      Study Solo
+                      Invite Participants
                     </Button>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleInviteParticipant(havruta.id)}
-                      title="Invite participant"
-                    >
-                      <PersonAdd />
-                    </IconButton>
                   </Box>
                 </CardContent>
               </Card>
@@ -525,6 +556,28 @@ const DashboardPage: React.FC = () => {
           )}
         </Paper>
       )}
+
+      {/* Create Havruta Dialog */}
+      <CreateHavrutaDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        onSuccess={handleCreateHavrutaSuccess}
+        onCreateHavruta={createHavruta}
+      />
+
+      {/* Participant Invitation Dialog */}
+      <ParticipantInvitationDialog
+        open={invitationDialogOpen}
+        onClose={() => {
+          setInvitationDialogOpen(false)
+          setSelectedHavrutaForInvitation(null)
+          // Refresh dashboard data when dialog closes to show updated participant count
+          refetch().catch(console.error)
+        }}
+        havrutaName={selectedHavrutaForInvitation?.name || ''}
+        havrutaId={selectedHavrutaForInvitation?.id || ''}
+        onInvite={handleSendInvitations}
+      />
 
       {/* Snackbar for notifications */}
       <Snackbar

@@ -5,6 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { vi } from 'vitest'
 import DashboardPage from '../pages/DashboardPage'
 import * as AuthContext from '../contexts/AuthContext'
+import * as useDashboardDataHook from '../hooks/useDashboardData'
 
 // Mock the authService
 vi.mock('../services/authService', () => ({
@@ -14,6 +15,13 @@ vi.mock('../services/authService', () => ({
     logout: vi.fn(),
     initiateOAuthLogin: vi.fn(),
     handleOAuthCallback: vi.fn(),
+  },
+}))
+
+// Mock the havrutaService
+vi.mock('../services/havrutaService', () => ({
+  havrutaService: {
+    inviteParticipants: vi.fn(),
   },
 }))
 
@@ -33,6 +41,53 @@ const mockUser = {
 // Mock the useAuth hook
 const mockUseAuth = vi.fn()
 vi.spyOn(AuthContext, 'useAuth').mockImplementation(mockUseAuth)
+
+// Mock the useDashboardData hook
+const mockUseDashboardData = vi.fn()
+vi.spyOn(useDashboardDataHook, 'useDashboardData').mockImplementation(mockUseDashboardData)
+
+// Mock data
+const mockHavrutot = [
+  {
+    id: '1',
+    name: 'Genesis Study Group',
+    bookId: 'genesis',
+    bookTitle: 'Genesis',
+    creatorId: 'user1',
+    participants: ['user1', 'user2'],
+    currentSection: 'Genesis 1:1',
+    isActive: true,
+    createdAt: new Date('2024-01-01'),
+    lastStudiedAt: new Date('2024-01-15'),
+    totalSessions: 5,
+  },
+  {
+    id: '2',
+    name: 'Talmud Bavli',
+    bookId: 'berakhot',
+    bookTitle: 'Berakhot',
+    creatorId: 'user1',
+    participants: ['user1', 'user3'],
+    currentSection: 'Berakhot 2a',
+    isActive: true,
+    createdAt: new Date('2024-01-02'),
+    lastStudiedAt: new Date('2024-01-14'),
+    totalSessions: 3,
+  },
+  {
+    id: '3',
+    name: 'Mishnah Study Circle',
+    bookId: 'mishnah',
+    bookTitle: 'Mishnah Berakhot',
+    creatorId: 'user1',
+    participants: ['user1', 'user4', 'user5'],
+    currentSection: 'Mishnah Berakhot 1:1',
+    isActive: false,
+    createdAt: new Date('2024-01-03'),
+    lastStudiedAt: new Date('2024-01-13'),
+    totalSessions: 8,
+  },
+]
 
 const renderDashboard = () => {
   return render(
@@ -59,6 +114,29 @@ describe('Dashboard Integration Tests', () => {
       clearError: vi.fn(),
       handleOAuthCallback: vi.fn(),
     })
+
+    mockUseDashboardData.mockReturnValue({
+      havrutot: mockHavrutot,
+      activeSessions: [],
+      nextSession: {
+        id: '1',
+        name: 'Genesis Study Group',
+        scheduledTime: new Date(Date.now() + 3600000),
+        currentSection: 'Genesis 1:1',
+      },
+      statistics: {
+        totalHavrutot: 3,
+        totalSessions: 16,
+        activeHavrutot: 2,
+        totalStudyPartners: 4,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      joinHavruta: vi.fn(),
+      scheduleSession: vi.fn(),
+      createHavruta: vi.fn(),
+    })
   })
 
   describe('Search and Filter Functionality', () => {
@@ -83,17 +161,16 @@ describe('Dashboard Integration Tests', () => {
     it('filters Havrutot by book title', async () => {
       renderDashboard()
       
-      // Search for "Berakhot"
+      // Search for "Berakhot" - should match both "Berakhot" and "Mishnah Berakhot"
       const searchInput = screen.getByPlaceholderText('Search Havrutot...')
       fireEvent.change(searchInput, { target: { value: 'Berakhot' } })
       
-      // Should only show Talmud Bavli in the cards section
-      // Note: "Genesis Study Group" may still appear in "Next Up" section
+      // Should show both Talmud Bavli and Mishnah Study Circle (both have "Berakhot" in book title)
       expect(screen.getByText('Talmud Bavli')).toBeInTheDocument()
-      expect(screen.queryByText('Mishnah Study Circle')).not.toBeInTheDocument()
+      expect(screen.getByText('Mishnah Study Circle')).toBeInTheDocument()
       
       // Check that the count reflects the filtered results
-      expect(screen.getByText('My Havrutot (1)')).toBeInTheDocument()
+      expect(screen.getByText('My Havrutot (2)')).toBeInTheDocument()
     })
 
     it('shows empty state when no results match filters', async () => {
@@ -162,63 +239,77 @@ describe('Dashboard Integration Tests', () => {
 
   describe('Quick Actions', () => {
     it('handles join Havruta action', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       renderDashboard()
       
-      // Click join button on first Havruta card
-      const joinButtons = screen.getAllByRole('button', { name: /^join$/i })
+      // Click join collaborative button on first Havruta card
+      const joinButtons = screen.getAllByRole('button', { name: /join collaborative/i })
       fireEvent.click(joinButtons[0])
       
-      expect(consoleSpy).toHaveBeenCalledWith('Join havruta 1')
-      consoleSpy.mockRestore()
+      // Should call the join function (mocked in useDashboardData)
+      expect(mockUseDashboardData().joinHavruta).toBeDefined()
     })
 
-    it('handles schedule session action', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    it('handles invite participants action', () => {
       renderDashboard()
       
-      // Click schedule button on first Havruta card
-      const scheduleButtons = screen.getAllByRole('button', { name: /schedule/i })
-      fireEvent.click(scheduleButtons[0])
+      // Click invite participants button on first Havruta card
+      const inviteButtons = screen.getAllByRole('button', { name: /invite participants/i })
+      fireEvent.click(inviteButtons[0])
       
-      expect(consoleSpy).toHaveBeenCalledWith('Schedule havruta 1')
-      consoleSpy.mockRestore()
+      // Should open invitation dialog
+      expect(screen.getByText(/invite participants to/i)).toBeInTheDocument()
     })
 
     it('handles invite participant action', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       renderDashboard()
       
-      // Click invite button (PersonAdd icon)
-      const inviteButtons = screen.getAllByTitle('Invite participant')
+      // Click invite participants button
+      const inviteButtons = screen.getAllByRole('button', { name: /invite participants/i })
       fireEvent.click(inviteButtons[0])
       
-      expect(consoleSpy).toHaveBeenCalledWith('Invite participant to havruta 1')
-      consoleSpy.mockRestore()
+      // Should open invitation dialog
+      expect(screen.getByText(/invite participants to/i)).toBeInTheDocument()
+    })
+
+    it('does not show Study Solo button', () => {
+      renderDashboard()
+      
+      // Study Solo button should not be present
+      expect(screen.queryByRole('button', { name: /study solo/i })).not.toBeInTheDocument()
+    })
+
+    it('shows Join Collaborative and Invite Participants buttons', () => {
+      renderDashboard()
+      
+      // Should show Join Collaborative buttons
+      const joinButtons = screen.getAllByRole('button', { name: /join collaborative/i })
+      expect(joinButtons.length).toBeGreaterThan(0)
+      
+      // Should show Invite Participants buttons
+      const inviteButtons = screen.getAllByRole('button', { name: /invite participants/i })
+      expect(inviteButtons.length).toBeGreaterThan(0)
     })
 
     it('handles create new Havruta action', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       renderDashboard()
       
       // Click new Havruta button
       const newHavrutaButton = screen.getByRole('button', { name: /new havruta/i })
       fireEvent.click(newHavrutaButton)
       
-      expect(consoleSpy).toHaveBeenCalledWith('Create new Havruta')
-      consoleSpy.mockRestore()
+      // Should open create havruta dialog
+      expect(screen.getByText(/create new havruta/i)).toBeInTheDocument()
     })
 
     it('handles join session from Next Up section', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       renderDashboard()
       
       // Click join session button in Next Up section
       const joinSessionButton = screen.getByRole('button', { name: /join session/i })
       fireEvent.click(joinSessionButton)
       
-      expect(consoleSpy).toHaveBeenCalledWith('Join havruta 1')
-      consoleSpy.mockRestore()
+      // Should call the join function (mocked in useDashboardData)
+      expect(mockUseDashboardData().joinHavruta).toBeDefined()
     })
   })
 

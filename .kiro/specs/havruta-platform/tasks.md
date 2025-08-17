@@ -176,11 +176,27 @@
 - [x] 10.2 Implement Havruta management interface
 
 
+
+
   - Create Havruta list component with filtering and sorting
   - Build "Next Up" section for scheduled sessions
-  - Implement quick action buttons (join, schedule, invite)
+  - Implement quick action buttons (join collaborative, invite participants)
+  - Remove "Study Solo" button from Havruta cards to focus on collaborative learning
   - Write integration tests for dashboard interactions
-  - _Requirements: 6.1, 6.2, 6.3_
+  - _Requirements: 6.1, 6.2, 6.3, 6.5_
+-
+
+- [x] 10.3 Create participant invitation system
+
+
+
+
+  - Build invitation dialog component with email input validation
+  - Implement email service for sending Havruta invitations
+  - Create invitation token generation and validation system
+  - Add database model and API endpoints for invitation management
+  - Write unit tests for email validation and invitation logic
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
 
 - [-] 11. Create text study interface
 
@@ -250,7 +266,12 @@
   - Write integration tests for progress tracking workflows
   - _Requirements: 7.1, 7.2, 7.4_
 
-- [ ] 14. Add comprehensive error handling and logging
+- [x] 14. Add comprehensive error handling and logging
+
+
+
+
+
   - Implement global error boundaries in React components
   - Add comprehensive logging system for backend services
   - Create user-friendly error messages and recovery options

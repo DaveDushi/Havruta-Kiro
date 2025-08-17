@@ -27,7 +27,12 @@ interface UseDashboardDataReturn extends DashboardData {
   refetch: () => Promise<void>
   joinHavruta: (havrutaId: string) => Promise<void>
   scheduleSession: (havrutaId: string) => Promise<void>
-  createHavruta: () => Promise<void>
+  createHavruta: (data: {
+    name: string
+    bookId: string
+    bookTitle: string
+    currentSection?: string
+  }) => Promise<void>
 }
 
 export const useDashboardData = (): UseDashboardDataReturn => {
@@ -177,11 +182,20 @@ export const useDashboardData = (): UseDashboardDataReturn => {
     }
   }, [fetchDashboardData])
 
-  const createHavruta = useCallback(async () => {
-    // This would typically open a modal or navigate to a creation page
-    // For now, just log the action
-    console.log('Create new Havruta - would open creation dialog')
-  }, [])
+  const createHavruta = useCallback(async (data: {
+    name: string
+    bookId: string
+    bookTitle: string
+    currentSection?: string
+  }) => {
+    try {
+      await havrutaService.createHavruta(data)
+      await fetchDashboardData() // Refresh the data
+    } catch (error) {
+      console.error('Error creating Havruta:', error)
+      throw error
+    }
+  }, [fetchDashboardData])
 
   useEffect(() => {
     fetchDashboardData()

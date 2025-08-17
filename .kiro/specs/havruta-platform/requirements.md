@@ -71,8 +71,9 @@ Havruta is a collaborative learning platform designed for paired or small-group 
 
 1. WHEN a user accesses the dashboard THEN the system SHALL display all their Havrutot with book titles, partner names, and current progress
 2. WHEN a user has scheduled sessions THEN the system SHALL display a "Next Up" section showing the next scheduled session
-3. WHEN a user views a Havruta on the dashboard THEN the system SHALL provide quick actions to join, schedule, or invite participants
-4. WHEN a user clicks join on an active Havruta THEN the system SHALL navigate them directly to the session
+3. WHEN a user views a Havruta on the dashboard THEN the system SHALL provide quick actions to join collaborative sessions and invite participants
+4. WHEN a user clicks join on an active Havruta THEN the system SHALL navigate them directly to the collaborative session
+5. WHEN a user views Havruta cards THEN the system SHALL NOT display a "Study Solo" option to maintain focus on collaborative learning
 
 ### Requirement 7
 
@@ -98,3 +99,17 @@ Havruta is a collaborative learning platform designed for paired or small-group 
 5. WHEN a scheduled session time arrives THEN the system SHALL notify participants and provide easy access to join
 6. IF a participant cannot attend a scheduled session THEN the system SHALL allow them to decline and notify other participants
 7. WHEN a user modifies a recurring session THEN the system SHALL allow them to update just that instance or all future instances
+
+### Requirement 9
+
+**User Story:** As a user, I want to invite new participants to my Havruta by email, so that I can expand my study group with people who may not yet be using the platform.
+
+#### Acceptance Criteria
+
+1. WHEN a user clicks the "Add Participant" button on a Havruta THEN the system SHALL open a dialog for entering email addresses
+2. WHEN a user enters email addresses in the invitation dialog THEN the system SHALL validate the email format before allowing submission
+3. WHEN a user submits valid email addresses THEN the system SHALL send invitation emails with a link to join the specific Havruta
+4. WHEN an invited email belongs to an existing user THEN the system SHALL automatically add the Havruta to their dashboard
+5. WHEN an invited email belongs to a new user THEN the system SHALL include registration instructions in the invitation email
+6. WHEN an invitation email is sent THEN the system SHALL display a confirmation message to the inviting user
+7. IF email sending fails THEN the system SHALL display an error message and allow the user to retry

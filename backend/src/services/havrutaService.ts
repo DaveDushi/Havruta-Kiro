@@ -1,5 +1,6 @@
 import { Havruta, HavrutaParticipant } from '@prisma/client'
 import { prisma } from '../utils/database'
+import { invitationService, InvitationResult } from './invitationService'
 import { z } from 'zod'
 
 // Validation schemas
@@ -630,6 +631,22 @@ export class HavrutaService {
     } catch (error) {
       console.error('Error fetching active Havrutot:', error)
       throw new Error('Failed to fetch active Havrutot')
+    }
+  }
+
+  /**
+   * Invite participants to a Havruta by email
+   */
+  async inviteParticipants(havrutaId: string, emails: string[], inviterUserId: string): Promise<InvitationResult> {
+    try {
+      return await invitationService.inviteParticipants({
+        havrutaId,
+        emails,
+        inviterUserId
+      })
+    } catch (error) {
+      console.error('Error inviting participants to Havruta:', error)
+      throw error instanceof Error ? error : new Error('Failed to invite participants')
     }
   }
 }

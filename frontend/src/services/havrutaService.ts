@@ -120,6 +120,23 @@ class HavrutaService {
   async getHavrutaState(id: string): Promise<any> {
     return this.makeRequest<any>(`/havrutot/${id}/state`)
   }
+
+  async inviteParticipants(havrutaId: string, emails: string[]): Promise<{
+    successful: string[]
+    failed: { email: string; reason: string }[]
+    existingUsers: string[]
+    newUsers: string[]
+  }> {
+    return this.makeRequest<{
+      successful: string[]
+      failed: { email: string; reason: string }[]
+      existingUsers: string[]
+      newUsers: string[]
+    }>(`/havrutot/${havrutaId}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ emails }),
+    })
+  }
 }
 
 export const havrutaService = new HavrutaService()

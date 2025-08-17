@@ -1,4 +1,8 @@
 export { default as ProtectedRoute } from './ProtectedRoute'
+export { CreateHavrutaDialog } from './CreateHavrutaDialog'
+export { ParticipantInvitationDialog } from './ParticipantInvitationDialog'
+export { ErrorBoundary, withErrorBoundary } from './ErrorBoundary'
+export { default as ErrorNotifications } from './ErrorNotifications'
 export * from './TextViewer'
 export * from './Layout'
 export * from './VideoCall'

@@ -25,6 +25,7 @@ model User {
   participantIn   HavrutaParticipant[]
   progress        Progress[]
   sessions        SessionParticipant[]
+  sentInvitations Invitation[] @relation("InvitationInviter")
   
   @@map("users")
 }
@@ -46,6 +47,7 @@ model Havruta {
   participants   HavrutaParticipant[]
   sessions       Session[]
   progress       Progress[]
+  invitations    Invitation[]
   
   @@map("havrutot")
 }
@@ -127,4 +129,22 @@ model Progress {
   
   @@unique([userId, havrutaId])
   @@map("progress")
+}
+
+model Invitation {
+  id              String   @id @default(cuid())
+  inviteeEmail    String
+  status          String   @default("pending") // 'pending' | 'accepted' | 'declined' | 'expired'
+  invitationToken String   @unique
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  
+  // Relations
+  inviterUserId   String
+  inviterUser     User     @relation("InvitationInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+  havrutaId       String
+  havruta         Havruta  @relation(fields: [havrutaId], references: [id], onDelete: Cascade)
+  
+  @@map("invitations")
 }

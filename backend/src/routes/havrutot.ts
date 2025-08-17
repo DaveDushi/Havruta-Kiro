@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { havrutaService } from '../services/havrutaService'
+import { invitationService } from '../services/invitationService'
 import { authenticateToken } from '../middleware/auth'
 import { z } from 'zod'
 
@@ -258,6 +259,74 @@ router.put('/:id/progress', async (req: Request, res: Response) => {
     const message = error instanceof Error ? error.message : 'Failed to update progress'
     const statusCode = message.includes('not a participant') ? 403 : 500
     res.status(statusCode).json({ error: message })
+  }
+})
+
+/**
+ * POST /api/havrutot/:id/invite
+ * Invite participants to a Havruta by email
+ */
+router.post('/:id/invite', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id
+    const havrutaId = req.params.id
+    const { emails } = req.body
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    // Validate emails array
+    if (!Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ error: 'Emails array is required and must not be empty' })
+    }
+
+    // Validate each email format
+    const emailSchema = z.string().email()
+    for (const email of emails) {
+      try {
+        emailSchema.parse(email)
+      } catch {
+        return res.status(400).json({ error: `Invalid email format: ${email}` })
+      }
+    }
+
+    const result = await havrutaService.inviteParticipants(havrutaId, emails, userId)
+    res.json(result)
+  } catch (error) {
+    console.error('Error inviting participants:', error)
+    const message = error instanceof Error ? error.message : 'Failed to invite participants'
+    const statusCode = message.includes('not found') ? 404 : 
+                      message.includes('Only participants') ? 403 : 400
+    res.status(statusCode).json({ error: message })
+  }
+})
+
+/**
+ * GET /api/havrutot/:id/invitations
+ * Get invitations for a Havruta
+ */
+router.get('/:id/invitations', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id
+    const havrutaId = req.params.id
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    // Check if user has access to this Havruta
+    const hasAccess = await havrutaService.hasAccess(havrutaId, userId)
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this Havruta' })
+    }
+
+    const invitations = await invitationService.getHavrutaInvitations(havrutaId)
+    res.json(invitations)
+  } catch (error) {
+    console.error('Error fetching Havruta invitations:', error)
+    const message = error instanceof Error ? error.message : 'Failed to fetch invitations'
+    res.status(500).json({ error: message })
   }
 })
 

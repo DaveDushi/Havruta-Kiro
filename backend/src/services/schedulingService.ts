@@ -108,7 +108,9 @@ export class SchedulingService {
         
         // Schedule notifications for this session
         try {
-          await notificationService.scheduleSessionNotifications(session.id)
+          if (notificationService && typeof notificationService.scheduleSessionNotifications === 'function') {
+            await notificationService.scheduleSessionNotifications(session.id)
+          }
         } catch (error) {
           console.error(`Failed to schedule notifications for session ${session.id}:`, error)
         }

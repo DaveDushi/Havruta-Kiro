@@ -95,7 +95,8 @@ interface CollaborativeNavigationProviderProps {
 
 export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(collaborativeReducer, initialState)
-  const { user } = useAuth()
+  const { state: authState } = useAuth()
+  const user = authState.user
 
   // Socket event handlers
   const handleNavigationUpdate = useCallback((event: NavigationEvent) => {
@@ -193,21 +194,28 @@ export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationPr
 
   // Context methods
   const connectToSession = useCallback(async (sessionId: string) => {
+    console.log('🔐 ConnectToSession called with:', { sessionId, user: user ? { id: user.id, name: user.name } : null })
+    
     if (!user) {
+      console.error('❌ User not authenticated in CollaborativeNavigationContext')
       throw new Error('User not authenticated')
     }
 
     try {
       // Ensure socket is connected first
       if (!socketService.isConnected()) {
-        console.log('Socket not connected, connecting first...')
+        console.log('🔌 Socket not connected, connecting first...')
         await socketService.connect(user)
+        console.log('✅ Socket connected successfully')
+      } else {
+        console.log('✅ Socket already connected')
       }
       
-      console.log('Joining session:', sessionId)
+      console.log('🚪 Joining session:', sessionId)
       await socketService.joinSession(sessionId)
+      console.log('✅ Successfully joined session:', sessionId)
     } catch (error) {
-      console.error('Failed to connect to session:', error)
+      console.error('❌ Failed to connect to session:', error)
       throw error
     }
   }, [user])

@@ -2,11 +2,28 @@ import { useState, useEffect, useCallback } from 'react'
 import { Havruta, Session } from '../types'
 import { havrutaService } from '../services/havrutaService'
 import { sessionService } from '../services/sessionService'
+import { schedulingService } from '../services/schedulingService'
 import { userService } from '../services/userService'
 
 interface DashboardData {
   havrutot: Havruta[]
   activeSessions: Session[]
+  upcomingSessions: Array<{
+    id: string
+    havrutaId: string
+    havrutaName: string
+    bookTitle: string
+    currentSection: string
+    startTime: Date
+    isRecurring: boolean
+    participants: Array<{
+      user: {
+        id: string
+        name: string
+        email: string
+      }
+    }>
+  }>
   nextSession: {
     id: string
     name: string
@@ -39,6 +56,7 @@ export const useDashboardData = (): UseDashboardDataReturn => {
   const [data, setData] = useState<DashboardData>({
     havrutot: [],
     activeSessions: [],
+    upcomingSessions: [],
     nextSession: null,
     statistics: {
       totalHavrutot: 0,
@@ -61,6 +79,7 @@ export const useDashboardData = (): UseDashboardDataReturn => {
         setData({
           havrutot: [],
           activeSessions: [],
+          upcomingSessions: [],
           nextSession: null,
           statistics: {
             totalHavrutot: 0,
@@ -78,15 +97,40 @@ export const useDashboardData = (): UseDashboardDataReturn => {
       const [
         havrutotResponse,
         activeSessionsResponse,
+        upcomingSessionsResponse,
         summaryResponse
       ] = await Promise.all([
         havrutaService.getUserHavrutot({ limit: 50 }).catch(() => ({ havrutot: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } })),
         sessionService.getActiveSessions().catch(() => []),
+        schedulingService.getUpcomingSessions(7).catch((error) => {
+          console.error('❌ Failed to fetch upcoming sessions:', error)
+          return { sessions: [], dateRange: { start: '', end: '' } }
+        }),
         userService.getHavrutotSummary().catch(() => ({ summary: null }))
       ])
 
       const havrutot = havrutotResponse.havrutot || []
       const activeSessions = activeSessionsResponse || []
+      const rawUpcomingSessions = upcomingSessionsResponse.sessions || []
+
+      console.log('📊 Dashboard data fetched:', {
+        havrutot: havrutot.length,
+        activeSessions: activeSessions.length,
+        rawUpcomingSessions: rawUpcomingSessions.length,
+        upcomingSessionsResponse
+      })
+
+      // Transform upcoming sessions to include Havruta info
+      const upcomingSessions = rawUpcomingSessions.map(session => ({
+        id: session.id,
+        havrutaId: session.havruta.id,
+        havrutaName: session.havruta.name,
+        bookTitle: session.havruta.bookTitle,
+        currentSection: session.havruta.currentSection,
+        startTime: new Date(session.startTime),
+        isRecurring: session.isRecurring || false,
+        participants: session.participants || []
+      }))
 
       // Calculate statistics
       const totalHavrutot = havrutot.length
@@ -100,17 +144,18 @@ export const useDashboardData = (): UseDashboardDataReturn => {
       })
       const totalStudyPartners = allParticipants.size
 
-      // Find next scheduled session (mock for now - would need scheduling data)
-      const nextSession = havrutot.length > 0 ? {
-        id: havrutot[0].id,
-        name: havrutot[0].name,
-        scheduledTime: new Date(Date.now() + 3600000), // 1 hour from now
-        currentSection: havrutot[0].currentSection,
+      // Find next scheduled session from upcoming sessions
+      const nextSession = upcomingSessions.length > 0 ? {
+        id: upcomingSessions[0].havrutaId, // Use havruta ID for joining
+        name: upcomingSessions[0].havrutaName,
+        scheduledTime: upcomingSessions[0].startTime,
+        currentSection: upcomingSessions[0].currentSection,
       } : null
 
       setData({
         havrutot,
         activeSessions,
+        upcomingSessions,
         nextSession,
         statistics: {
           totalHavrutot,
@@ -129,6 +174,7 @@ export const useDashboardData = (): UseDashboardDataReturn => {
         setData({
           havrutot: [],
           activeSessions: [],
+          upcomingSessions: [],
           nextSession: null,
           statistics: {
             totalHavrutot: 0,
@@ -173,8 +219,8 @@ export const useDashboardData = (): UseDashboardDataReturn => {
 
   const scheduleSession = useCallback(async (havrutaId: string) => {
     try {
-      // For now, just initialize a session (scheduling would be more complex)
-      await sessionService.initializeSession({ havrutaId })
+      // Use the proper scheduling service to schedule a session
+      await schedulingService.quickScheduleSession(havrutaId)
       await fetchDashboardData()
     } catch (error) {
       console.error('Error scheduling session:', error)

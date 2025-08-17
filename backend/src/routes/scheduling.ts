@@ -110,6 +110,8 @@ router.get('/sessions/upcoming', authenticateToken, async (req: Request, res: Re
       return res.status(401).json({ error: 'User not authenticated' })
     }
 
+    console.log('🔍 Fetching upcoming sessions for user:', userId)
+
     const { days = '30' } = req.query
     const daysAhead = parseInt(days as string, 10)
     
@@ -117,7 +119,11 @@ router.get('/sessions/upcoming', authenticateToken, async (req: Request, res: Re
     const endDate = new Date()
     endDate.setDate(endDate.getDate() + daysAhead)
 
+    console.log('📅 Date range:', { startDate, endDate, daysAhead })
+
     const sessions = await schedulingService.getUpcomingSessions(userId, startDate, endDate)
+    
+    console.log('📊 Found sessions:', sessions.length)
 
     res.json({
       sessions: sessions,

@@ -83,7 +83,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
   const [isVideoCallInitializing, setIsVideoCallInitializing] = useState(false)
   const [isVideoCallMinimized, setIsVideoCallMinimized] = useState(false)
   const [showVideoCall, setShowVideoCall] = useState(false)
-  const [isAuthReady, setIsAuthReady] = useState(false)
+  // Removed isAuthReady - using userId prop directly
 
   // Memoized highlights combining external and search highlights
   const allHighlights = useMemo(() => {
@@ -260,28 +260,23 @@ const TextViewer: React.FC<TextViewerProps> = ({
 
   // Video call handlers
   const initializeVideoCall = useCallback(async () => {
-    // Try to get user ID from props or auth service
-    const currentUserId = userId || (await authService.getCurrentUser())?.id
-    
-    if (!isCollaborative || !sessionId || !currentUserId) {
-      console.log('Video call not initialized - missing requirements:', { 
+    if (!isCollaborative || !sessionId || !userId) {
+      console.log('❌ Video call not initialized - missing requirements:', { 
         isCollaborative, 
         sessionId, 
-        userId, 
-        currentUserId,
-        authUser: await authService.getCurrentUser()
+        userId
       })
       return
     }
 
     // Wait for socket connection
     if (!socketService.isConnected()) {
-      console.log('Waiting for socket connection before initializing video call...')
+      console.log('⏳ Waiting for socket connection before initializing video call...')
       setTimeout(() => initializeVideoCall(), 1000)
       return
     }
 
-    console.log('Initializing video call for session:', sessionId, 'user:', userId)
+    console.log('🎥 Initializing video call for session:', sessionId, 'user:', userId)
     setIsVideoCallInitializing(true)
     setVideoCallError(null)
 
@@ -308,7 +303,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
       }
 
       webrtcService.setCallbacks(callbacks)
-      await webrtcService.initializeCall(sessionId, currentUserId)
+      await webrtcService.initializeCall(sessionId, userId)
       setShowVideoCall(true)
       setIsVideoCallInitializing(false)
       console.log('Video call initialized successfully')
@@ -343,20 +338,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
   // Suppress unused variable warning
   void handleParticipantNavigation
 
-  // Check if authentication is ready
-  useEffect(() => {
-    const checkAuthReady = async () => {
-      try {
-        const user = await authService.getCurrentUser()
-        setIsAuthReady(!!user)
-      } catch (error) {
-        console.log('Auth not ready yet, retrying...')
-        setTimeout(checkAuthReady, 500)
-      }
-    }
-    
-    checkAuthReady()
-  }, [])
+  // Removed auth ready checking - using userId prop directly
 
   // Initialize with initial ref
   useEffect(() => {
@@ -380,51 +362,34 @@ const TextViewer: React.FC<TextViewerProps> = ({
 
   // Connect to collaborative session
   useEffect(() => {
-    if (isCollaborative && sessionId && isAuthReady) {
-      // Wait for user to be available before connecting
-      const connectWhenReady = async () => {
-        let currentUser = userId
-        
-        // If no userId prop, try to get from auth service
-        if (!currentUser) {
-          try {
-            const authUser = await authService.getCurrentUser()
-            currentUser = authUser?.id
-          } catch (error) {
-            console.log('Waiting for authentication to complete...')
-            // Retry after a short delay
-            setTimeout(connectWhenReady, 1000)
-            return
-          }
-        }
-        
-        if (!currentUser) {
-          console.log('No user available, retrying in 1 second...')
-          setTimeout(connectWhenReady, 1000)
-          return
-        }
-        
-        console.log('Connecting to collaborative session:', sessionId, 'with user:', currentUser)
-        
+    if (isCollaborative && sessionId && userId) {
+      console.log('🚀 Connecting to collaborative session:', { sessionId, userId })
+      
+      const connectToSession = async () => {
         try {
           await collaborative.connectToSession(sessionId)
-          console.log('Successfully connected to collaborative session')
-          
-          // Video call will be initialized manually when user clicks "Join Call"
+          console.log('✅ Successfully connected to collaborative session')
         } catch (error) {
-          console.error('Failed to connect to collaborative session:', error)
+          console.error('❌ Failed to connect to collaborative session:', error)
         }
       }
       
-      connectWhenReady()
+      connectToSession()
       
       return () => {
-        console.log('Disconnecting from collaborative session')
+        console.log('🔌 Disconnecting from collaborative session')
         collaborative.disconnectFromSession()
         webrtcService.leaveCall()
       }
+    } else {
+      console.log('⏳ Waiting for collaborative session requirements:', { 
+        isCollaborative, 
+        sessionId, 
+        userId,
+        hasAll: !!(isCollaborative && sessionId && userId)
+      })
     }
-  }, [isCollaborative, sessionId, collaborative, userId, initializeVideoCall, isAuthReady])
+  }, [isCollaborative, sessionId, collaborative, userId])
 
   // Set up collaborative navigation listener
   useEffect(() => {

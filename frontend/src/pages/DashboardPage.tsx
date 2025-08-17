@@ -37,9 +37,11 @@ import { useDashboardData } from '../hooks/useDashboardData'
 import { havrutaService } from '../services/havrutaService'
 import { CreateHavrutaDialog } from '../components/CreateHavrutaDialog'
 import { ParticipantInvitationDialog } from '../components/ParticipantInvitationDialog'
+import SessionSchedulingDialog from '../components/SessionSchedulingDialog'
 import { Havruta } from '../types'
 import { useNavigate } from 'react-router-dom'
 import { testLogin, isTestMode } from '../utils/testAuth'
+import { runWebRTCTests } from '../utils/webrtcTest'
 
 const DashboardPage: React.FC = () => {
   const { state: authState } = useAuth()
@@ -57,11 +59,14 @@ const DashboardPage: React.FC = () => {
   }>({ open: false, message: '', severity: 'info' })
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
   const [invitationDialogOpen, setInvitationDialogOpen] = React.useState(false)
+  const [schedulingDialogOpen, setSchedulingDialogOpen] = React.useState(false)
   const [selectedHavrutaForInvitation, setSelectedHavrutaForInvitation] = React.useState<Havruta | null>(null)
+  const [selectedHavrutaForScheduling, setSelectedHavrutaForScheduling] = React.useState<Havruta | null>(null)
 
   // Use the dashboard data hook
   const {
     havrutot,
+    upcomingSessions,
     nextSession,
     statistics,
     isLoading,
@@ -72,14 +77,14 @@ const DashboardPage: React.FC = () => {
     createHavruta,
   } = useDashboardData()
 
-  // Filter and sort Havrutot
-  const filteredAndSortedHavrutot = React.useMemo(() => {
-    let filtered = havrutot.filter(havruta => {
-      const matchesSearch = havruta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           havruta.bookTitle.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter and sort upcoming sessions
+  const filteredAndSortedSessions = React.useMemo(() => {
+    let filtered = upcomingSessions.filter(session => {
+      const matchesSearch = session.havrutaName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           session.bookTitle.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = filterStatus === 'all' || 
-                           (filterStatus === 'active' && havruta.isActive) ||
-                           (filterStatus === 'inactive' && !havruta.isActive)
+                           (filterStatus === 'active') || // All upcoming sessions are "active"
+                           (filterStatus === 'inactive' && false) // No inactive upcoming sessions
       return matchesSearch && matchesStatus
     })
 
@@ -87,20 +92,18 @@ const DashboardPage: React.FC = () => {
       let comparison = 0
       switch (sortBy) {
         case 'name':
-          comparison = a.name.localeCompare(b.name)
+          comparison = a.havrutaName.localeCompare(b.havrutaName)
           break
         case 'lastStudied':
-          comparison = new Date(a.lastStudiedAt).getTime() - new Date(b.lastStudiedAt).getTime()
-          break
         case 'sessions':
-          comparison = a.totalSessions - b.totalSessions
+          comparison = a.startTime.getTime() - b.startTime.getTime()
           break
       }
       return sortOrder === 'asc' ? comparison : -comparison
     })
 
     return filtered
-  }, [havrutot, searchTerm, filterStatus, sortBy, sortOrder])
+  }, [upcomingSessions, searchTerm, filterStatus, sortBy, sortOrder])
 
   const handleCreateHavruta = () => {
     setCreateDialogOpen(true)
@@ -133,53 +136,95 @@ const DashboardPage: React.FC = () => {
     }
   }
 
-  const handleJoinHavruta = async (havrutaId: string) => {
+  const handleTestWebRTC = async () => {
     try {
-      const havruta = havrutot.find(h => h.id === havrutaId)
-      if (havruta) {
-        // For now, skip backend session join and go directly to TextViewer
-        // TODO: Implement proper session management later
-        
-        // Navigate to TextViewer with collaborative mode enabled
-        const params = new URLSearchParams({
-          sessionId: `session-${havrutaId}`,
-          collaborative: 'true',
-          ref: havruta.currentSection
-        })
-        const url = `/study/${encodeURIComponent(havruta.bookTitle)}?${params.toString()}`
-        console.log('Navigating to:', url)
-        navigate(url)
-        
-        setSnackbar({
-          open: true,
-          message: 'Successfully joined Havruta session!',
-          severity: 'success'
-        })
-      }
+      const results = await runWebRTCTests()
+      const message = `WebRTC Test Results:
+Support: ${results.support.success ? '✓' : '✗'} ${results.support.message}
+Media: ${results.mediaAccess.success ? '✓' : '✗'} ${results.mediaAccess.message}
+STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnectivity.message}`
+      
+      setSnackbar({
+        open: true,
+        message,
+        severity: results.overall.success ? 'success' : 'warning'
+      })
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Failed to join Havruta session',
+        message: 'WebRTC test failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
         severity: 'error'
       })
     }
   }
 
-  const handleScheduleSession = async (havrutaId: string) => {
+  const handleJoinHavruta = async (havrutaId: string) => {
     try {
-      await scheduleSession(havrutaId)
-      setSnackbar({
-        open: true,
-        message: 'Session scheduled successfully!',
-        severity: 'success'
-      })
+      const havruta = havrutot.find(h => h.id === havrutaId)
+      if (havruta) {
+        // Optional: Create/join a session for progress tracking
+        try {
+          const activeSession = await sessionService.getActiveSessionForHavruta(havrutaId)
+          if (activeSession) {
+            await sessionService.joinSession(activeSession.id)
+          } else {
+            const newSession = await sessionService.initializeSession({ havrutaId })
+            await sessionService.joinSession(newSession.id)
+          }
+        } catch (sessionError) {
+          // Session management is optional - continue without it
+          console.warn('Session management failed, continuing without session tracking:', sessionError)
+        }
+        
+        // Navigate to TextViewer with collaborative mode enabled
+        // Use havrutaId for WebSocket connection (this is what the backend expects)
+        const params = new URLSearchParams({
+          sessionId: havrutaId, // This is actually the havruta ID for WebSocket connection
+          collaborative: 'true',
+          ref: havruta.currentSection
+        })
+        const url = `/study/${encodeURIComponent(havruta.bookTitle)}?${params.toString()}`
+        console.log('🚀 Joining collaborative session:', {
+          havrutaId,
+          havrutaName: havruta.name,
+          bookTitle: havruta.bookTitle,
+          currentSection: havruta.currentSection,
+          url,
+          user: authState.user ? { id: authState.user.id, name: authState.user.name } : null
+        })
+        navigate(url)
+        
+        setSnackbar({
+          open: true,
+          message: 'Successfully joined collaborative study session!',
+          severity: 'success'
+        })
+      }
     } catch (error) {
+      console.error('Error joining Havruta:', error)
       setSnackbar({
         open: true,
-        message: 'Failed to schedule session',
+        message: 'Failed to join collaborative session: ' + (error instanceof Error ? error.message : 'Unknown error'),
         severity: 'error'
       })
     }
+  }
+
+  const handleScheduleSession = (havrutaId: string) => {
+    const havruta = havrutot.find(h => h.id === havrutaId)
+    if (havruta) {
+      setSelectedHavrutaForScheduling(havruta)
+      setSchedulingDialogOpen(true)
+    }
+  }
+
+  const handleSchedulingSuccess = (message: string) => {
+    setSnackbar({
+      open: true,
+      message,
+      severity: 'success'
+    })
+    refetch() // Refresh dashboard data
   }
 
   const handleInviteParticipant = (havrutaId: string) => {
@@ -247,14 +292,50 @@ const DashboardPage: React.FC = () => {
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
           {isTestMode() && (
-            <Button
-              variant="outlined"
-              size={isMobile ? 'large' : 'medium'}
-              onClick={handleTestLogin}
-              sx={{ minWidth: isMobile ? '100%' : 'auto' }}
-            >
-              Test Login
-            </Button>
+            <>
+              <Button
+                variant="outlined"
+                size={isMobile ? 'large' : 'medium'}
+                onClick={handleTestLogin}
+                sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+              >
+                Test Login
+              </Button>
+              <Button
+                variant="outlined"
+                size={isMobile ? 'large' : 'medium'}
+                onClick={handleTestWebRTC}
+                sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+              >
+                Test WebRTC
+              </Button>
+              <Button
+                variant="outlined"
+                size={isMobile ? 'large' : 'medium'}
+                onClick={async () => {
+                  try {
+                    const { socketService } = await import('../services/socketService')
+                    if (authState.user) {
+                      await socketService.connect(authState.user)
+                      setSnackbar({
+                        open: true,
+                        message: 'Socket connected successfully!',
+                        severity: 'success'
+                      })
+                    }
+                  } catch (error) {
+                    setSnackbar({
+                      open: true,
+                      message: 'Socket connection failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
+                      severity: 'error'
+                    })
+                  }
+                }}
+                sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+              >
+                Test Socket
+              </Button>
+            </>
           )}
           <Button
             variant="outlined"
@@ -372,11 +453,11 @@ const DashboardPage: React.FC = () => {
         </Box>
       )}
 
-      {/* All Havrutot */}
+      {/* Upcoming Sessions */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <MenuBook color="primary" />
-          My Havrutot ({filteredAndSortedHavrutot.length})
+          <Schedule color="primary" />
+          Upcoming Sessions ({filteredAndSortedSessions.length})
         </Typography>
       </Box>
 
@@ -387,7 +468,7 @@ const DashboardPage: React.FC = () => {
             <TextField
               fullWidth
               size="small"
-              placeholder="Search Havrutot..."
+              placeholder="Search Sessions..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
@@ -423,9 +504,9 @@ const DashboardPage: React.FC = () => {
                 onChange={(e) => setSortBy(e.target.value as 'name' | 'lastStudied' | 'sessions')}
                 startAdornment={<Sort sx={{ mr: 1 }} />}
               >
-                <MenuItem value="name">Name</MenuItem>
-                <MenuItem value="lastStudied">Last Studied</MenuItem>
-                <MenuItem value="sessions">Sessions</MenuItem>
+                <MenuItem value="name">Havruta Name</MenuItem>
+                <MenuItem value="lastStudied">Start Time</MenuItem>
+                <MenuItem value="sessions">Start Time</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -443,10 +524,10 @@ const DashboardPage: React.FC = () => {
         </Grid>
       </Paper>
       
-      {filteredAndSortedHavrutot.length > 0 ? (
+      {filteredAndSortedSessions.length > 0 ? (
         <Grid container spacing={3}>
-          {filteredAndSortedHavrutot.map((havruta) => (
-            <Grid item xs={12} sm={6} lg={4} key={havruta.id}>
+          {filteredAndSortedSessions.map((session) => (
+            <Grid item xs={12} sm={6} lg={4} key={session.id}>
               <Card 
                 elevation={2}
                 sx={{ 
@@ -463,11 +544,11 @@ const DashboardPage: React.FC = () => {
                 <CardContent sx={{ flexGrow: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Typography variant="h6" component="h3" sx={{ fontWeight: 600 }}>
-                      {havruta.name}
+                      {session.havrutaName}
                     </Typography>
                     <Chip
-                      label={havruta.isActive ? 'Active' : 'Inactive'}
-                      color={havruta.isActive ? 'success' : 'default'}
+                      label={session.isRecurring ? 'Recurring' : 'One-time'}
+                      color={session.isRecurring ? 'primary' : 'default'}
                       size="small"
                     />
                   </Box>
@@ -475,24 +556,27 @@ const DashboardPage: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <MenuBook fontSize="small" color="action" />
                     <Typography color="text.secondary">
-                      {havruta.bookTitle}
+                      {session.bookTitle}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <Schedule fontSize="small" color="action" />
+                    <Typography variant="body2" color="text.secondary">
+                      {session.startTime.toLocaleString()}
                     </Typography>
                   </Box>
                   
                   <Typography variant="body2" sx={{ mb: 2 }}>
-                    Current: {havruta.currentSection}
+                    Continue from: {session.currentSection}
                   </Typography>
                   
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <Group fontSize="small" color="action" />
                     <Typography variant="body2" color="text.secondary">
-                      {havruta.participants.length} participants • {havruta.totalSessions} sessions
+                      {session.participants.length} participants
                     </Typography>
                   </Box>
-                  
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Last studied: {new Date(havruta.lastStudiedAt).toLocaleDateString()}
-                  </Typography>
                 </CardContent>
                 
                 <CardContent sx={{ pt: 0 }}>
@@ -501,19 +585,19 @@ const DashboardPage: React.FC = () => {
                       variant="contained"
                       size="small"
                       startIcon={<PlayArrow />}
-                      onClick={() => handleJoinHavruta(havruta.id)}
+                      onClick={() => handleJoinHavruta(session.havrutaId)}
                       sx={{ flex: 1, minWidth: 'fit-content' }}
                     >
-                      Join Collaborative
+                      Join Session
                     </Button>
                     <Button
                       variant="outlined"
                       size="small"
-                      startIcon={<PersonAdd />}
-                      onClick={() => handleInviteParticipant(havruta.id)}
+                      startIcon={<Schedule />}
+                      onClick={() => handleScheduleSession(session.havrutaId)}
                       sx={{ flex: 1, minWidth: 'fit-content' }}
                     >
-                      Invite Participants
+                      Reschedule
                     </Button>
                   </Box>
                 </CardContent>
@@ -523,25 +607,42 @@ const DashboardPage: React.FC = () => {
         </Grid>
       ) : (
         <Paper sx={{ textAlign: 'center', py: 8, px: 4 }}>
-          <MenuBook sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+          <Schedule sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {havrutot.length === 0 ? 'No Havrutot yet' : 'No Havrutot match your filters'}
+            {upcomingSessions.length === 0 ? 'No upcoming sessions' : 'No sessions match your filters'}
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
-            {havrutot.length === 0 
-              ? 'Create your first Havruta to start studying Jewish texts with partners in real-time collaborative sessions'
-              : 'Try adjusting your search or filter criteria to find your Havrutot'
+            {upcomingSessions.length === 0 
+              ? 'Schedule your first session to start studying with your Havruta partners'
+              : 'Try adjusting your search or filter criteria to find your sessions'
             }
           </Typography>
-          {havrutot.length === 0 ? (
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<Add />}
-              onClick={handleCreateHavruta}
-            >
-              Create Your First Havruta
-            </Button>
+          {upcomingSessions.length === 0 ? (
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<Add />}
+                onClick={handleCreateHavruta}
+              >
+                Create Havruta
+              </Button>
+              {havrutot.length > 0 && (
+                <Button
+                  variant="outlined"
+                  size="large"
+                  startIcon={<Schedule />}
+                  onClick={() => {
+                    const firstHavruta = havrutot[0]
+                    if (firstHavruta) {
+                      handleScheduleSession(firstHavruta.id)
+                    }
+                  }}
+                >
+                  Schedule Session
+                </Button>
+              )}
+            </Box>
           ) : (
             <Button
               variant="outlined"
@@ -556,6 +657,78 @@ const DashboardPage: React.FC = () => {
           )}
         </Paper>
       )}
+
+      {/* My Havrutot Section */}
+      <Box sx={{ mt: 6, mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+          <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <MenuBook color="primary" />
+            My Havrutot ({havrutot.length})
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<Add />}
+            onClick={handleCreateHavruta}
+          >
+            New Havruta
+          </Button>
+        </Box>
+
+        {havrutot.length > 0 ? (
+          <Grid container spacing={2}>
+            {havrutot.map((havruta) => (
+              <Grid item xs={12} sm={6} md={4} key={havruta.id}>
+                <Card variant="outlined" sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      {havruta.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {havruta.bookTitle}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                      {havruta.participants.length} participants
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        size="small"
+                        startIcon={<Schedule />}
+                        onClick={() => handleScheduleSession(havruta.id)}
+                      >
+                        Schedule
+                      </Button>
+                      <Button
+                        size="small"
+                        startIcon={<PersonAdd />}
+                        onClick={() => handleInviteParticipant(havruta.id)}
+                      >
+                        Invite
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Paper sx={{ textAlign: 'center', py: 4, px: 4 }}>
+            <MenuBook sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No Havrutot yet
+            </Typography>
+            <Typography color="text.secondary" sx={{ mb: 3 }}>
+              Create your first Havruta to start studying with partners
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleCreateHavruta}
+            >
+              Create Your First Havruta
+            </Button>
+          </Paper>
+        )}
+      </Box>
 
       {/* Create Havruta Dialog */}
       <CreateHavrutaDialog
@@ -577,6 +750,17 @@ const DashboardPage: React.FC = () => {
         havrutaName={selectedHavrutaForInvitation?.name || ''}
         havrutaId={selectedHavrutaForInvitation?.id || ''}
         onInvite={handleSendInvitations}
+      />
+
+      {/* Session Scheduling Dialog */}
+      <SessionSchedulingDialog
+        open={schedulingDialogOpen}
+        onClose={() => {
+          setSchedulingDialogOpen(false)
+          setSelectedHavrutaForScheduling(null)
+        }}
+        havruta={selectedHavrutaForScheduling}
+        onSuccess={handleSchedulingSuccess}
       />
 
       {/* Snackbar for notifications */}

@@ -17,11 +17,21 @@
     "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
     "test:frontend": "npm run test --workspace=frontend",
     "test:backend": "npm run test --workspace=backend",
+    "test:e2e": "node tests/run-tests-simple.js",
+    "test:e2e:auth": "playwright test tests/e2e/auth.spec.ts",
+    "test:e2e:dashboard": "playwright test tests/e2e/dashboard.spec.ts",
+    "test:e2e:session": "playwright test tests/e2e/havruta-session.spec.ts",
+    "test:e2e:invitation": "playwright test tests/e2e/invitation.spec.ts",
+    "test:performance": "playwright test tests/performance/standalone-performance.spec.ts",
+    "test:load": "playwright test tests/performance/load-test.spec.ts",
+    "test:all": "npm run test && npm run test:e2e",
     "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
     "type-check": "npm run type-check --workspace=backend && npm run type-check --workspace=frontend"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@playwright/test": "^1.54.2",
+    "concurrently": "^8.2.2",
+    "playwright": "^1.54.2"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -32,7 +32,7 @@ export const RecurrencePatternSchema = z.object({
 export const ScheduledSessionSchema = z.object({
   havrutaId: z.string().cuid(),
   startTime: z.date(),
-  participantIds: z.array(z.string().cuid()).min(1),
+  participantIds: z.array(z.string().cuid()).optional().default([]),
   isRecurring: z.boolean().default(false),
   recurrencePattern: RecurrencePatternSchema.optional()
 })
@@ -73,7 +73,7 @@ export class SchedulingService {
    * Generate future session instances based on recurrence pattern
    */
   async generateRecurringSessions(
-    baseSession: CreateSessionData & { recurrencePatternId: string },
+    baseSession: CreateSessionData & { recurrencePatternId: string; participantIds?: string[] },
     maxInstances: number = 52 // Default to 1 year of weekly sessions
   ): Promise<Session[]> {
     const pattern = await prisma.recurrencePattern.findUnique({
@@ -105,6 +105,27 @@ export class SchedulingService {
             recurrencePatternId: pattern.id
           }
         })
+        
+        // Add participants to session
+        let participantIds = baseSession.participantIds || []
+        
+        // If no specific participants provided, use all Havruta participants
+        if (participantIds.length === 0) {
+          const havrutaParticipants = await prisma.havrutaParticipant.findMany({
+            where: { havrutaId: baseSession.havrutaId }
+          })
+          participantIds = havrutaParticipants.map(p => p.userId)
+        }
+        
+        // Add participants to the session
+        for (const userId of participantIds) {
+          await prisma.sessionParticipant.create({
+            data: {
+              userId,
+              sessionId: session.id
+            }
+          })
+        }
         
         // Schedule notifications for this session
         try {
@@ -188,6 +209,8 @@ export class SchedulingService {
     startDate: Date = new Date(), 
     endDate?: Date
   ): Promise<Session[]> {
+    console.log('🔍 Getting upcoming sessions for user:', userId, 'from:', startDate, 'to:', endDate)
+    
     const whereClause: any = {
       startTime: {
         gte: startDate
@@ -203,10 +226,18 @@ export class SchedulingService {
       whereClause.startTime.lte = endDate
     }
 
-    return await prisma.session.findMany({
+    const sessions = await prisma.session.findMany({
       where: whereClause,
       include: {
-        havruta: true,
+        havruta: {
+          include: {
+            participants: {
+              include: {
+                user: true
+              }
+            }
+          }
+        },
         participants: {
           include: {
             user: true
@@ -218,6 +249,13 @@ export class SchedulingService {
         startTime: 'asc'
       }
     })
+
+    console.log('📊 Found sessions:', sessions.length)
+    sessions.forEach(session => {
+      console.log('  - Session:', session.id, 'Havruta:', session.havruta.name, 'Start:', session.startTime)
+    })
+
+    return sessions
   }
 
   /**

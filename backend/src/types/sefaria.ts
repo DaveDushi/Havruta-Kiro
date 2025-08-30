@@ -7,20 +7,52 @@ export interface SefariaText {
   textDepth: number
   sectionNames: string[]
   addressTypes: string[]
+  next?: string | null
+  prev?: string | null
+  book: string
+  title: string
+  heTitle: string
+  categories: string[]
+  primary_category: string
+  sections: number[]
+  toSections: number[]
+  sectionRef: string
+  heSectionRef: string
+  firstAvailableSectionRef: string
+  isSpanning: boolean
+  spanningRefs: string[]
 }
 
 export interface SefariaVersion {
-  title: string
+  title?: string
   versionTitle: string
   versionSource?: string
   status: string
-  priority: number
+  priority: number | string
   license?: string
   versionNotes?: string
-  digitizedBySefaria?: boolean
+  formatAsPoetry?: boolean | string
+  digitizedBySefaria?: boolean | string
   method?: string
   heversionSource?: string
+  versionUrl?: string
   versionTitleInHebrew?: string
+  versionNotesInHebrew?: string
+  shortVersionTitle?: string
+  shortVersionTitleInHebrew?: string
+  extendedNotes?: string
+  extendedNotesHebrew?: string
+  purchaseInformationImage?: string
+  purchaseInformationURL?: string
+  hasManuallyWrappedRefs?: string
+  actualLanguage?: string
+  languageFamilyName?: string
+  isSource?: boolean
+  isPrimary?: boolean
+  direction?: string
+  language?: string
+  text?: string[] | string[][]
+  firstSectionRef?: string
 }
 
 export interface SefariaIndex {

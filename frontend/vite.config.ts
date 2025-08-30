@@ -16,23 +16,25 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     port: 3000,
     strictPort: true,
+    allowedHosts: ['havruta.daviddusi.com'],
+    hmr: { 
+      protocol: 'wss', 
+      host: 'havruta.daviddusi.com', 
+      port: 443 
+    },
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
+      '/api': { 
+        target: 'http://localhost:3001', 
+        changeOrigin: true 
       },
-      '/socket.io': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        ws: true,
+      '/socket.io': { 
+        target: 'http://localhost:3001', 
+        changeOrigin: true, 
+        ws: true 
       },
     },
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
   },
 })

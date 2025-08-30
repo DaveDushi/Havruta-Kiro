@@ -15,3 +15,94 @@ code {
 #root {
   min-height: 100vh;
 }
+
+/* Sefaria Text Formatting Styles */
+.sefaria-text {
+  line-height: 1.6;
+}
+
+.sefaria-text .footnote-marker {
+  font-size: 0.75em;
+  vertical-align: super;
+  color: #666;
+  font-weight: bold;
+  cursor: help;
+  text-decoration: none;
+}
+
+.sefaria-text .footnote-marker:hover {
+  color: #333;
+  background-color: #f0f0f0;
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+.sefaria-text .footnote {
+  font-size: 0.85em;
+  color: #555;
+  font-style: italic;
+  border-left: 2px solid #ddd;
+  padding-left: 8px;
+  margin-left: 4px;
+}
+
+.sefaria-text .mam-spi-samekh {
+  letter-spacing: 0.2em;
+  font-weight: bold;
+}
+
+.sefaria-text sup {
+  font-size: 0.75em;
+  vertical-align: super;
+  color: #666;
+}
+
+.sefaria-text sub {
+  font-size: 0.75em;
+  vertical-align: sub;
+}
+
+.sefaria-text big {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.sefaria-text small {
+  font-size: 0.85em;
+}
+
+.sefaria-text i {
+  font-style: italic;
+}
+
+.sefaria-text b, .sefaria-text strong {
+  font-weight: bold;
+}
+
+.sefaria-text em {
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Hebrew text specific styles */
+.sefaria-hebrew {
+  direction: rtl;
+  text-align: right;
+  font-family: 'Times New Roman', 'Noto Serif Hebrew', serif;
+}
+
+.sefaria-hebrew .footnote-marker {
+  margin-left: 2px;
+  margin-right: 0;
+}
+
+/* English text specific styles */
+.sefaria-english {
+  direction: ltr;
+  text-align: left;
+}
+
+.sefaria-english .footnote-marker {
+  margin-right: 2px;
+  margin-left: 0;
+}

@@ -10,7 +10,7 @@ const router = Router()
 const CreateScheduledSessionSchema = z.object({
   havrutaId: z.string().cuid(),
   startTime: z.string().datetime(),
-  participantIds: z.array(z.string().cuid()).min(1),
+  participantIds: z.array(z.string().cuid()).optional().default([]),
   isRecurring: z.boolean().default(false),
   recurrencePattern: z.object({
     frequency: z.enum(['once', 'daily', 'weekly', 'bi-weekly', 'monthly']),
@@ -60,7 +60,8 @@ router.post('/sessions', authenticateToken, async (req: Request, res: Response) 
       const sessions = await schedulingService.generateRecurringSessions({
         havrutaId: validatedData.havrutaId,
         startTime: new Date(validatedData.startTime),
-        recurrencePatternId: recurrencePatternId
+        recurrencePatternId: recurrencePatternId,
+        participantIds: validatedData.participantIds
       })
 
       res.status(201).json({
@@ -79,7 +80,8 @@ router.post('/sessions', authenticateToken, async (req: Request, res: Response) 
       const sessions = await schedulingService.generateRecurringSessions({
         havrutaId: validatedData.havrutaId,
         startTime: new Date(validatedData.startTime),
-        recurrencePatternId: oncePattern.id
+        recurrencePatternId: oncePattern.id,
+        participantIds: validatedData.participantIds
       }, 1)
 
       res.status(201).json({

@@ -34,12 +34,28 @@ const mockSefariaText: SefariaText = {
       title: 'Genesis',
       versionTitle: 'The Contemporary Torah, Jewish Publication Society, 2006',
       versionSource: 'https://www.sefaria.org',
-      language: 'en'
+      language: 'en',
+      status: 'locked',
+      priority: 1
     }
   ],
   textDepth: 2,
   sectionNames: ['Chapter', 'Verse'],
-  addressTypes: ['Integer', 'Integer']
+  addressTypes: ['Integer', 'Integer'],
+  next: 'Genesis 2',
+  prev: null,
+  book: 'Genesis',
+  title: 'Genesis',
+  heTitle: 'בראשית',
+  categories: ['Tanakh', 'Torah'],
+  primary_category: 'Tanakh',
+  sections: [1],
+  toSections: [1],
+  sectionRef: 'Genesis 1',
+  heSectionRef: 'בראשית א',
+  firstAvailableSectionRef: 'Genesis 1:1',
+  isSpanning: false,
+  spanningRefs: []
 }
 
 describe('TextViewer', () => {

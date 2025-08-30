@@ -27,27 +27,44 @@ import schedulingRoutes from './routes/scheduling'
 import sefariaRoutes from './routes/sefaria'
 import invitationRoutes from './routes/invitations'
 import errorRoutes from './routes/errors'
-import testAuthRoutes from '../test-auth-endpoint.js'
 
 // Load environment variables
 dotenv.config()
 
 const app = express()
+
+// Trust proxy for Cloudflare tunnel
+app.set('trust proxy', 1)
+
 const server = createServer(app)
 const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 })
 
 const PORT = process.env.PORT || 3001
 
 // Middleware
-app.use(helmet())
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+}))
+
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }))
 
 // Request ID and logging
@@ -82,7 +99,6 @@ app.use('/api/scheduling', schedulingRoutes)
 app.use('/api/sefaria', sefariaRoutes)
 app.use('/api/invitations', invitationRoutes)
 app.use('/api/errors', errorRoutes)
-app.use('/api/test', testAuthRoutes)
 
 // Basic health check route
 app.get('/api/health', async (req, res) => {

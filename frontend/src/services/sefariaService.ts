@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { SefariaText, SefariaIndex, SefariaTextStructure, SefariaSearchResult, SefariaLink } from '../types'
 
-const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 class SefariaService {
   private cache = new Map<string, any>()
@@ -21,7 +21,7 @@ class SefariaService {
     }
 
     try {
-      const url = `${API_BASE}/api/sefaria${endpoint}`
+      const url = `${API_BASE_URL}/sefaria${endpoint}`
       
       // Get auth token from localStorage (optional)
       const token = localStorage.getItem('token')

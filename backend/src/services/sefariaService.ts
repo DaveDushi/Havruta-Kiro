@@ -83,10 +83,61 @@ export class SefariaService {
     }
 
     const encodedRef = encodeURIComponent(ref)
-    const data = await this.makeRequestWithRetry<SefariaText>(`/texts/${encodedRef}`)
-    this.setCache(cacheKey, data)
+    const rawData = await this.makeRequestWithRetry<any>(`/texts/${encodedRef}`)
     
-    return data
+    console.log('Raw Sefaria API response:', JSON.stringify(rawData, null, 2))
+    
+    // Process the response to extract text content
+    // The text might be at the top level or in the versions array
+    let textContent = rawData.text || []
+    let hebrewContent = rawData.he || []
+    
+    // If text is not at top level, try to get it from the primary version
+    if ((!textContent || textContent.length === 0) && rawData.versions && rawData.versions.length > 0) {
+      const primaryVersion = rawData.versions.find((v: any) => v.isPrimary) || rawData.versions[0]
+      if (primaryVersion && primaryVersion.text) {
+        textContent = primaryVersion.text
+      }
+    }
+    
+    // Similar for Hebrew text
+    if ((!hebrewContent || hebrewContent.length === 0) && rawData.versions && rawData.versions.length > 0) {
+      const hebrewVersion = rawData.versions.find((v: any) => v.language === 'he' || v.actualLanguage === 'he')
+      if (hebrewVersion && hebrewVersion.text) {
+        hebrewContent = hebrewVersion.text
+      }
+    }
+    
+    const processedData: SefariaText = {
+      ref: rawData.ref,
+      heRef: rawData.heRef,
+      text: textContent,
+      he: hebrewContent,
+      versions: rawData.versions || rawData.available_versions || [],
+      textDepth: rawData.textDepth,
+      sectionNames: rawData.sectionNames || [],
+      addressTypes: rawData.addressTypes || [],
+      next: rawData.next,
+      prev: rawData.prev,
+      book: rawData.book,
+      title: rawData.title,
+      heTitle: rawData.heTitle,
+      categories: rawData.categories || [],
+      primary_category: rawData.primary_category,
+      sections: rawData.sections || [],
+      toSections: rawData.toSections || [],
+      sectionRef: rawData.sectionRef,
+      heSectionRef: rawData.heSectionRef,
+      firstAvailableSectionRef: rawData.firstAvailableSectionRef,
+      isSpanning: rawData.isSpanning || false,
+      spanningRefs: rawData.spanningRefs || []
+    }
+    
+    console.log('Processed text data:', processedData)
+    
+    this.setCache(cacheKey, processedData)
+    
+    return processedData
   }
 
   /**
@@ -240,6 +291,43 @@ export class SefariaService {
       size: this.cache.size,
       keys: Array.from(this.cache.keys())
     }
+  }
+
+  /**
+   * Parse a text reference into its components
+   */
+  parseRef(ref: string): { book: string; chapter?: number; verse?: number } {
+    const parts = ref.split(' ')
+    if (parts.length < 2) {
+      return { book: ref }
+    }
+
+    const book = parts.slice(0, -1).join(' ')
+    const reference = parts[parts.length - 1]
+    
+    if (reference.includes(':')) {
+      const [chapterStr, verseStr] = reference.split(':')
+      return {
+        book,
+        chapter: parseInt(chapterStr, 10),
+        verse: parseInt(verseStr, 10)
+      }
+    } else {
+      return {
+        book,
+        chapter: parseInt(reference, 10)
+      }
+    }
+  }
+
+  /**
+   * Build a reference string from components
+   */
+  buildRef(book: string, chapter: number, verse?: number): string {
+    if (verse !== undefined) {
+      return `${book} ${chapter}:${verse}`
+    }
+    return `${book} ${chapter}`
   }
 
   /**

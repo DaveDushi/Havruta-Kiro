@@ -19,26 +19,29 @@ Havruta is a collaborative learning platform designed for paired or small-group 
 
 ### Requirement 2
 
-**User Story:** As a user, I want to create or join Havruta learning sessions with other users, so that I can study Jewish texts collaboratively.
+**User Story:** As a user, I want to create or join Havrutot (study partnerships) with other users, so that I can establish ongoing collaborative text study relationships.
 
 #### Acceptance Criteria
 
 1. WHEN a user creates a new Havruta THEN the system SHALL allow selection of a book from the Sefaria library
 2. WHEN a user creates a new Havruta THEN the system SHALL allow invitation of 1 or more study partners
-3. WHEN a user joins an existing Havruta THEN the system SHALL add them to the session participant list
-4. WHEN a Havruta is created THEN the system SHALL generate a unique session identifier
-5. IF a user tries to join a non-existent Havruta THEN the system SHALL display an error message
+3. WHEN a user joins an existing Havruta THEN the system SHALL add them to the Havruta participant list
+4. WHEN a Havruta is created THEN the system SHALL generate a unique Havruta identifier
+5. WHEN a Havruta is created THEN the system SHALL initialize it with no active sessions
+6. IF a user tries to join a non-existent Havruta THEN the system SHALL display an error message
 
 ### Requirement 3
 
-**User Story:** As a Havruta participant, I want the session to automatically load the last studied section when I join, so that we can continue from where we left off.
+**User Story:** As a Havruta participant, I want to start learning sessions within my Havruta that automatically load our last studied section, so that we can continue from where we left off.
 
 #### Acceptance Criteria
 
-1. WHEN a user joins an active Havruta THEN the system SHALL load the last saved text section for all participants
-2. WHEN a new Havruta is created THEN the system SHALL start from the beginning of the selected book
-3. WHEN participants navigate to a new section THEN the system SHALL sync the navigation for all participants in real-time
-4. WHEN a Havruta session ends THEN the system SHALL automatically save the current section as the last studied location
+1. WHEN a user starts a new session within a Havruta THEN the system SHALL create a new session instance linked to that Havruta
+2. WHEN a session is started THEN the system SHALL load the last saved text section from the Havruta's progress
+3. WHEN a new Havruta has its first session THEN the system SHALL start from the beginning of the selected book
+4. WHEN participants navigate to a new section during a session THEN the system SHALL sync the navigation for all session participants in real-time
+5. WHEN a session ends THEN the system SHALL automatically save the current section as the Havruta's last studied location
+6. WHEN a session ends THEN the system SHALL record the session in the Havruta's session history
 
 ### Requirement 4
 
@@ -53,17 +56,30 @@ Havruta is a collaborative learning platform designed for paired or small-group 
 
 ### Requirement 5
 
-**User Story:** As a Havruta participant, I want built-in video communication that starts automatically, so that I can discuss the texts with my study partners without needing external tools.
+**User Story:** As a Havruta participant, I want to start and join individual learning sessions within my Havruta, so that I can have focused study periods with my partners.
 
 #### Acceptance Criteria
 
-1. WHEN a user joins a Havruta session THEN the system SHALL automatically initiate a video call with all participants
+1. WHEN a user wants to study THEN the system SHALL allow them to start a new session within any of their Havrutot
+2. WHEN a session is started THEN the system SHALL notify all Havruta participants and allow them to join
+3. WHEN a participant joins a session THEN the system SHALL add them to the active session participant list
+4. WHEN a session has no active participants THEN the system SHALL automatically end the session after a timeout period
+5. WHEN a session is active THEN the system SHALL display session status and participant count to Havruta members
+6. WHEN multiple sessions are requested for the same Havruta THEN the system SHALL only allow one active session per Havruta at a time
+
+### Requirement 6
+
+**User Story:** As a Havruta participant, I want built-in video communication that starts automatically when I join a session, so that I can discuss the texts with my study partners without needing external tools.
+
+#### Acceptance Criteria
+
+1. WHEN a user joins a learning session THEN the system SHALL automatically initiate a video call with all session participants
 2. WHEN a participant joins an ongoing session THEN the system SHALL add them to the existing video call
 3. WHEN a user prefers audio-only THEN the system SHALL provide an option to disable video while maintaining audio
 4. WHEN a participant leaves the session THEN the system SHALL remove them from the video call
 5. IF video call fails to initialize THEN the system SHALL display an error message and provide retry options
 
-### Requirement 6
+### Requirement 7
 
 **User Story:** As a user, I want a dashboard showing all my Havrutot with relevant information, so that I can easily manage and access my study sessions.
 
@@ -75,20 +91,23 @@ Havruta is a collaborative learning platform designed for paired or small-group 
 4. WHEN a user clicks join on an active Havruta THEN the system SHALL navigate them directly to the collaborative session
 5. WHEN a user views Havruta cards THEN the system SHALL NOT display a "Study Solo" option to maintain focus on collaborative learning
 
-### Requirement 7
+### Requirement 8
 
-**User Story:** As a user, I want to track my progress and view my study history, so that I can see my learning journey and accomplishments.
+**User Story:** As a user, I want to invite new participants to my Havruta by email, so that I can expand my study group with people who may not yet be using the platform.
 
 #### Acceptance Criteria
 
-1. WHEN a user views their progress THEN the system SHALL display completion status for each Havruta
-2. WHEN a user accesses their history THEN the system SHALL show past sessions with dates and sections covered
-3. WHEN a Havruta session is completed THEN the system SHALL update the progress tracking automatically
-4. WHEN a user views a specific Havruta's history THEN the system SHALL display all previous sessions and their covered content
+1. WHEN a user clicks the "Add Participant" button on a Havruta THEN the system SHALL open a dialog for entering email addresses
+2. WHEN a user enters email addresses in the invitation dialog THEN the system SHALL validate the email format before allowing submission
+3. WHEN a user submits valid email addresses THEN the system SHALL send invitation emails with a link to join the specific Havruta
+4. WHEN an invited email belongs to an existing user THEN the system SHALL automatically add the Havruta to their dashboard
+5. WHEN an invited email belongs to a new user THEN the system SHALL include registration instructions in the invitation email
+6. WHEN an invitation email is sent THEN the system SHALL display a confirmation message to the inviting user
+7. IF email sending fails THEN the system SHALL display an error message and allow the user to retry
 
-### Requirement 8
+### Requirement 9
 
-**User Story:** As a user, I want to schedule future Havruta sessions with recurring options, so that I can plan regular study times with my partners.
+**User Story:** As a user, I want to schedule future learning sessions within my Havrutot with recurring options, so that I can plan regular study times with my partners.
 
 #### Acceptance Criteria
 
@@ -100,9 +119,9 @@ Havruta is a collaborative learning platform designed for paired or small-group 
 6. IF a participant cannot attend a scheduled session THEN the system SHALL allow them to decline and notify other participants
 7. WHEN a user modifies a recurring session THEN the system SHALL allow them to update just that instance or all future instances
 
-### Requirement 9
+### Requirement 10
 
-**User Story:** As a user, I want to invite new participants to my Havruta by email, so that I can expand my study group with people who may not yet be using the platform.
+**User Story:** As a user, I want to track my progress and view my study history, so that I can see my learning journey and accomplishments.
 
 #### Acceptance Criteria
 

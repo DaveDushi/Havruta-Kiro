@@ -8,6 +8,42 @@ import {
 } from '@mui/material'
 import { SefariaText, TextSection, SearchHighlight } from '../../types'
 
+// Simple HTML sanitizer for Sefaria text
+const sanitizeHtml = (html: string): string => {
+  // Allow only specific tags that Sefaria uses
+  const allowedTags = ['sup', 'sub', 'big', 'small', 'span', 'i', 'b', 'strong', 'em']
+  const allowedAttributes = ['class', 'title']
+  
+  // Basic sanitization - in production, consider using a library like DOMPurify
+  let sanitized = html
+  
+  // Remove script tags and their content
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+  
+  // Remove on* event handlers
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '')
+  
+  return sanitized
+}
+
+// Component to render HTML content safely
+const HtmlContent: React.FC<{ html: string; className?: string; isHebrew?: boolean }> = ({ 
+  html, 
+  className = '', 
+  isHebrew = false 
+}) => {
+  const sanitizedHtml = useMemo(() => sanitizeHtml(html), [html])
+  
+  const cssClasses = `sefaria-text ${isHebrew ? 'sefaria-hebrew' : 'sefaria-english'} ${className}`.trim()
+  
+  return (
+    <span 
+      className={cssClasses}
+      dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+    />
+  )
+}
+
 interface TextContentProps {
   text: SefariaText
   section: TextSection
@@ -22,19 +58,30 @@ interface HighlightedTextProps {
   highlights: SearchHighlight[]
   searchQuery?: string
   lineRef: string
+  isHebrew?: boolean
 }
 
 const HighlightedText: React.FC<HighlightedTextProps> = ({
   text,
   highlights,
   searchQuery,
-  lineRef
+  lineRef,
+  isHebrew = false
 }) => {
   const theme = useTheme()
 
   const highlightedText = useMemo(() => {
+    // Check if text contains HTML tags
+    const hasHtml = /<[^>]+>/.test(text)
+    
     if (!highlights.length && !searchQuery) {
-      return text
+      return hasHtml ? <HtmlContent html={text} isHebrew={isHebrew} /> : text
+    }
+
+    // For now, if there are highlights and HTML, we'll render HTML without highlighting
+    // This is a simplified approach - a full implementation would need to parse HTML and apply highlights
+    if (hasHtml) {
+      return <HtmlContent html={text} isHebrew={isHebrew} />
     }
 
     // Find highlights for this specific line
@@ -137,12 +184,16 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({
 
 const TextContent: React.FC<TextContentProps> = ({
   text,
-
+  section,
   highlights = [],
   searchQuery,
   loading = false,
   isMobile = false
 }) => {
+  console.log('TextContent received text:', text)
+  console.log('TextContent text.text:', text?.text)
+  console.log('TextContent text.he:', text?.he)
+  
   if (loading) {
     return (
       <Box sx={{ p: 2 }}>
@@ -233,6 +284,36 @@ const TextContent: React.FC<TextContentProps> = ({
                         borderRadius: 1,
                         px: 1,
                         mx: -1
+                      },
+                      // Sefaria-specific HTML styling
+                      '& .footnote-marker': {
+                        fontSize: '0.75em',
+                        verticalAlign: 'super',
+                        color: 'text.secondary',
+                        fontWeight: 'bold'
+                      },
+                      '& .footnote': {
+                        fontSize: '0.85em',
+                        color: 'text.secondary',
+                        fontStyle: 'italic'
+                      },
+                      '& .mam-spi-samekh': {
+                        letterSpacing: '0.2em'
+                      },
+                      '& sup': {
+                        fontSize: '0.75em',
+                        verticalAlign: 'super',
+                        color: 'text.secondary'
+                      },
+                      '& sub': {
+                        fontSize: '0.75em',
+                        verticalAlign: 'sub'
+                      },
+                      '& big': {
+                        fontSize: '1.2em'
+                      },
+                      '& small': {
+                        fontSize: '0.85em'
                       }
                     }}
                   >
@@ -241,6 +322,7 @@ const TextContent: React.FC<TextContentProps> = ({
                       highlights={highlights}
                       searchQuery={searchQuery}
                       lineRef={lineRef}
+                      isHebrew={true}
                     />
                   </Typography>
                 )
@@ -287,6 +369,36 @@ const TextContent: React.FC<TextContentProps> = ({
                         borderRadius: 1,
                         px: 1,
                         mx: -1
+                      },
+                      // Sefaria-specific HTML styling
+                      '& .footnote-marker': {
+                        fontSize: '0.75em',
+                        verticalAlign: 'super',
+                        color: 'text.secondary',
+                        fontWeight: 'bold'
+                      },
+                      '& .footnote': {
+                        fontSize: '0.85em',
+                        color: 'text.secondary',
+                        fontStyle: 'italic'
+                      },
+                      '& .mam-spi-samekh': {
+                        letterSpacing: '0.2em'
+                      },
+                      '& sup': {
+                        fontSize: '0.75em',
+                        verticalAlign: 'super',
+                        color: 'text.secondary'
+                      },
+                      '& sub': {
+                        fontSize: '0.75em',
+                        verticalAlign: 'sub'
+                      },
+                      '& big': {
+                        fontSize: '1.2em'
+                      },
+                      '& small': {
+                        fontSize: '0.85em'
                       }
                     }}
                   >
@@ -295,6 +407,7 @@ const TextContent: React.FC<TextContentProps> = ({
                       highlights={highlights}
                       searchQuery={searchQuery}
                       lineRef={lineRef}
+                      isHebrew={false}
                     />
                   </Typography>
                 )
@@ -303,21 +416,6 @@ const TextContent: React.FC<TextContentProps> = ({
           </Paper>
         )}
       </Box>
-
-      {/* Version information */}
-      {text.versions && text.versions.length > 0 && (
-        <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-            Text Versions:
-          </Typography>
-          {text.versions.map((version, index) => (
-            <Typography key={index} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-              {version.language}: {version.versionTitle}
-              {version.versionSource && ` (${version.versionSource})`}
-            </Typography>
-          ))}
-        </Box>
-      )}
     </Box>
   )
 }

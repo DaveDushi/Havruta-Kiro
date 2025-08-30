@@ -35,6 +35,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useDashboardData } from '../hooks/useDashboardData'
 import { havrutaService } from '../services/havrutaService'
+import { sessionService } from '../services/sessionService'
 import { CreateHavrutaDialog } from '../components/CreateHavrutaDialog'
 import { ParticipantInvitationDialog } from '../components/ParticipantInvitationDialog'
 import SessionSchedulingDialog from '../components/SessionSchedulingDialog'

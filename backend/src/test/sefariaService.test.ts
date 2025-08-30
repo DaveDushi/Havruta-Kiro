@@ -164,7 +164,7 @@ describe('SefariaService', () => {
 
       const result = await sefariaService.getText('Genesis 1:1')
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/v3/texts/Genesis%201%3A1')
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/texts/Genesis%201%3A1')
       expect(result).toEqual(mockTextData)
     })
 
@@ -189,7 +189,7 @@ describe('SefariaService', () => {
 
       await sefariaService.getText('Genesis 1:1-3')
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/v3/texts/Genesis%201%3A1-3')
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/texts/Genesis%201%3A1-3')
     })
   })
 

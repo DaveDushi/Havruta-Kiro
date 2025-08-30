@@ -140,7 +140,7 @@ export const useDashboardData = (): UseDashboardDataReturn => {
       // Calculate unique study partners
       const allParticipants = new Set<string>()
       havrutot.forEach(h => {
-        h.participants.forEach(p => allParticipants.add(p))
+        h.participants.forEach(p => allParticipants.add(p.user.id))
       })
       const totalStudyPartners = allParticipants.size
 

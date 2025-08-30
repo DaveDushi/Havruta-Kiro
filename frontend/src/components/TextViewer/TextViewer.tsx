@@ -109,6 +109,9 @@ const TextViewer: React.FC<TextViewerProps> = ({
 
     try {
       const text = await sefariaService.getText(ref)
+      console.log('Loaded text data:', text)
+      console.log('Text array:', text.text)
+      console.log('Hebrew array:', text.he)
       setCurrentText(text)
       
       // Create text section from the loaded text
@@ -125,8 +128,8 @@ const TextViewer: React.FC<TextViewerProps> = ({
       setCurrentSection(section)
       onSectionChange?.(section)
       
-      // Update navigation state
-      updateNavigation(text.ref)
+      // Update navigation state using API response data
+      updateNavigationFromText(text)
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load text'
@@ -137,22 +140,16 @@ const TextViewer: React.FC<TextViewerProps> = ({
     }
   }, [onSectionChange])
 
-  // Update navigation state
-  const updateNavigation = useCallback(async (ref: string) => {
+  // Update navigation state from API response
+  const updateNavigationFromText = useCallback((text: SefariaText) => {
     try {
-      const parsed = sefariaService.parseRef(ref)
-      
-      // For now, create basic navigation
-      // In a full implementation, this would use the text structure
       const nav: TextNavigation = {
-        currentRef: ref,
-        availableSections: [], // Would be populated from text structure
-        hasNext: !!parsed.chapter && parsed.chapter > 1,
-        hasPrevious: !!parsed.chapter && parsed.chapter > 1,
-        nextRef: parsed.chapter ? sefariaService.buildRef(parsed.book, parsed.chapter + 1) : undefined,
-        previousRef: parsed.chapter && parsed.chapter > 1 
-          ? sefariaService.buildRef(parsed.book, parsed.chapter - 1) 
-          : undefined
+        currentRef: text.ref,
+        availableSections: [], // Could be populated from text structure if needed
+        hasNext: !!text.next,
+        hasPrevious: !!text.prev,
+        nextRef: text.next || undefined,
+        previousRef: text.prev || undefined
       }
       
       setNavigation(nav)
@@ -171,7 +168,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
     if (isCollaborative && !fromSync && !isNavigatingFromSync) {
       collaborative.broadcastNavigation(newRef)
     }
-  }, [loadText, onNavigationChange, isCollaborative, collaborative, isNavigatingFromSync])
+  }, [loadText, onNavigationChange, isCollaborative, isNavigatingFromSync])
 
   // Handle search
   const handleSearch = useCallback(async (query: string) => {
@@ -234,14 +231,13 @@ const TextViewer: React.FC<TextViewerProps> = ({
   // Handle collaborative navigation events
   const handleCollaborativeNavigation = useCallback((event: NavigationEvent) => {
     // Don't sync to our own navigation events
-    const currentUser = collaborative.state.participants.find(p => p.userId === event.userId)
-    if (currentUser && event.userId !== socketService.getCurrentUser()?.id) {
+    if (event.userId !== userId) {
       setNavigationNotification(`${event.userName} navigated to ${event.newRef}`)
       setIsNavigatingFromSync(true)
       handleNavigation(event.newRef, true)
       setIsNavigatingFromSync(false)
     }
-  }, [collaborative.state.participants, handleNavigation])
+  }, [handleNavigation, userId])
 
   // Handle conflict resolution
   const handleConflictResolution = useCallback((chosenRef: string) => {
@@ -389,7 +385,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
         hasAll: !!(isCollaborative && sessionId && userId)
       })
     }
-  }, [isCollaborative, sessionId, collaborative, userId])
+  }, [isCollaborative, sessionId, userId])
 
   // Set up collaborative navigation listener
   useEffect(() => {
@@ -400,7 +396,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
         collaborative.offNavigationUpdate(handleCollaborativeNavigation)
       }
     }
-  }, [isCollaborative, collaborative, handleCollaborativeNavigation])
+  }, [isCollaborative, handleCollaborativeNavigation])
 
   if (loading && !currentText) {
     return (
@@ -830,7 +826,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
               Auth Status: {authService.isAuthenticated() ? 'Yes' : 'No'}
             </Typography>
             <Typography variant="caption" sx={{ color: 'white', display: 'block' }}>
-              Auth Ready: {isAuthReady ? 'Yes' : 'No'}
+              User ID Available: {userId ? 'Yes' : 'No'}
             </Typography>
             <Typography variant="caption" sx={{ color: 'white', display: 'block' }}>
               Socket Connected: {socketService.isConnected() ? 'Yes' : 'No'}

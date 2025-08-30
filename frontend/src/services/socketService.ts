@@ -79,7 +79,8 @@ class SocketService {
       console.log('Connecting to WebSocket with token:', token.substring(0, 20) + '...')
       
       // Connect to the backend WebSocket server
-      this.socket = io(import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001', {
+      const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001'
+      this.socket = io(backendUrl, {
         auth: {
           token: token
         },

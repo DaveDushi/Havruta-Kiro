@@ -178,6 +178,12 @@
 
 
 
+
+
+
+
+
+
   - Create Havruta list component with filtering and sorting
   - Build "Next Up" section for scheduled sessions
   - Implement quick action buttons (join collaborative, invite participants)

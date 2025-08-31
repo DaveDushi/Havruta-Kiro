@@ -56,9 +56,10 @@ class SessionService {
     })
   }
 
-  async endSession(id: string): Promise<void> {
+  async endSession(id: string, endingSection: string, coverageRange?: string): Promise<void> {
     await this.makeRequest<void>(`/sessions/${id}/end`, {
       method: 'POST',
+      body: JSON.stringify({ endingSection, coverageRange }),
     })
   }
 
@@ -87,6 +88,27 @@ class SessionService {
 
   async getSessionState(id: string): Promise<any> {
     return this.makeRequest<any>(`/sessions/${id}/state`)
+  }
+
+  async createInstantSession(havrutaId: string): Promise<Session> {
+    return this.makeRequest<Session>('/sessions/instant', {
+      method: 'POST',
+      body: JSON.stringify({ havrutaId }),
+    })
+  }
+
+  async joinInstantSession(sessionId: string): Promise<{
+    participant: any
+    session: Session
+    redirectUrl: string
+  }> {
+    return this.makeRequest<{
+      participant: any
+      session: Session
+      redirectUrl: string
+    }>(`/sessions/${sessionId}/join-instant`, {
+      method: 'POST',
+    })
   }
 }
 

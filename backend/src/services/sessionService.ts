@@ -1,10 +1,11 @@
-import { Session, SessionParticipant, Progress } from '@prisma/client'
+import { Session, SessionParticipant } from '@prisma/client'
 import { prisma } from '../utils/database'
 import { z } from 'zod'
 
 // Validation schemas
 export const createSessionSchema = z.object({
   havrutaId: z.string().min(1, 'Havruta ID is required'),
+  type: z.enum(['scheduled', 'instant']).optional().default('scheduled'),
   startTime: z.date().optional().default(() => new Date()),
   participantIds: z.array(z.string()).optional().default([])
 })
@@ -20,9 +21,15 @@ export const updateProgressSchema = z.object({
   timeStudied: z.number().int().min(0).optional()
 })
 
+export const endSessionSchema = z.object({
+  endingSection: z.string().min(1, 'Ending section is required'),
+  coverageRange: z.string().optional()
+})
+
 export type CreateSessionData = z.infer<typeof createSessionSchema>
 export type JoinSessionData = z.infer<typeof joinSessionSchema>
 export type UpdateProgressData = z.infer<typeof updateProgressSchema>
+export type EndSessionData = z.infer<typeof endSessionSchema>
 
 export interface SessionWithRelations extends Session {
   havruta: {
@@ -30,9 +37,9 @@ export interface SessionWithRelations extends Session {
     name: string
     bookId: string
     bookTitle: string
-    currentSection: string
+    lastPlace: string
     isActive: boolean
-    creator: {
+    owner: {
       id: string
       name: string
       email: string
@@ -46,7 +53,7 @@ export interface SessionWithRelations extends Session {
       id: string
       name: string
       email: string
-      profilePicture?: string
+      profilePicture?: string | null
     }
   }>
   _count?: {
@@ -57,10 +64,14 @@ export interface SessionWithRelations extends Session {
 export interface SessionState {
   id: string
   havrutaId: string
+  type: string
+  status: string
   isActive: boolean
   startTime: Date
   endTime: Date | null
-  currentSection: string
+  startingSection: string
+  endingSection: string | null
+  coverageRange: string | null
   sectionsStudied: string[]
   activeParticipants: Array<{
     userId: string
@@ -71,6 +82,15 @@ export interface SessionState {
 }
 
 export class SessionService {
+  private notificationService?: any // Will be set after NotificationService is created
+
+  /**
+   * Set the notification service (called after NotificationService is instantiated)
+   */
+  setNotificationService(notificationService: any): void {
+    this.notificationService = notificationService
+  }
+
   /**
    * Initialize a new session for a Havruta
    */
@@ -78,13 +98,13 @@ export class SessionService {
     try {
       // Validate input data
       const validatedData = createSessionSchema.parse(data)
-      const { havrutaId, startTime, participantIds } = validatedData
+      const { havrutaId, type, startTime, participantIds } = validatedData
 
       // Verify Havruta exists and is active
       const havruta = await prisma.havruta.findUnique({
         where: { id: havrutaId },
         include: {
-          creator: true,
+          owner: true,
           participants: {
             include: { user: true }
           }
@@ -102,7 +122,7 @@ export class SessionService {
       const existingActiveSession = await prisma.session.findFirst({
         where: {
           havrutaId,
-          endTime: null
+          status: { in: ['active', 'scheduled'] }
         }
       })
 
@@ -112,11 +132,14 @@ export class SessionService {
 
       // Create session with participants in a transaction
       const session = await prisma.$transaction(async (tx) => {
-        // Create the session
+        // Create the session - it loads Havruta's lastPlace as starting section
         const newSession = await tx.session.create({
           data: {
             havrutaId,
+            type,
+            status: type === 'instant' ? 'active' : 'scheduled',
             startTime,
+            startingSection: havruta.lastPlace || `${havruta.bookTitle} 1:1`,
             sectionsStudied: []
           }
         })
@@ -169,7 +192,7 @@ export class SessionService {
         include: {
           havruta: {
             include: {
-              creator: {
+              owner: {
                 select: {
                   id: true,
                   name: true,
@@ -232,7 +255,7 @@ export class SessionService {
       if (!session) {
         throw new Error('Session not found')
       }
-      if (session.endTime) {
+      if (session.status === 'completed' || session.status === 'cancelled') {
         throw new Error('Cannot join ended session')
       }
 
@@ -261,7 +284,8 @@ export class SessionService {
 
       if (existingSessionParticipant) {
         if (!existingSessionParticipant.leftAt) {
-          throw new Error('User is already in this session')
+          // User is already actively in the session - this is fine, just return the existing record
+          return existingSessionParticipant
         }
         // User rejoining - update leftAt to null
         return await prisma.sessionParticipant.update({
@@ -295,7 +319,10 @@ export class SessionService {
     try {
       // Verify session exists
       const session = await prisma.session.findUnique({
-        where: { id: sessionId }
+        where: { id: sessionId },
+        include: {
+          havruta: true
+        }
       })
       if (!session) {
         throw new Error('Session not found')
@@ -317,11 +344,38 @@ export class SessionService {
         throw new Error('User has already left this session')
       }
 
-      // Mark participant as left
-      await prisma.sessionParticipant.update({
-        where: { id: participant.id },
-        data: { leftAt: new Date() }
-      })
+      // For instant sessions, if the owner is leaving, end the session instead
+      if (session.type === 'instant' && session.havruta.ownerId === userId) {
+        // End the instant session automatically
+        const endTime = new Date()
+        await prisma.$transaction(async (tx) => {
+          // End the session
+          await tx.session.update({
+            where: { id: sessionId },
+            data: { 
+              status: 'completed',
+              endTime,
+              endingSection: session.startingSection || `${session.havruta.bookTitle} 1:1`,
+              coverageRange: `Instant session ended by owner`
+            }
+          })
+
+          // Mark all active participants as left
+          await tx.sessionParticipant.updateMany({
+            where: {
+              sessionId,
+              leftAt: null
+            },
+            data: { leftAt: endTime }
+          })
+        })
+      } else {
+        // Regular leave behavior for scheduled sessions or non-owners
+        await prisma.sessionParticipant.update({
+          where: { id: participant.id },
+          data: { leftAt: new Date() }
+        })
+      }
     } catch (error) {
       console.error('Error leaving session:', error)
       throw error instanceof Error ? error : new Error('Failed to leave session')
@@ -329,10 +383,107 @@ export class SessionService {
   }
 
   /**
-   * End a session
+   * Activate a scheduled session (when participants join)
    */
-  async endSession(sessionId: string, userId: string): Promise<void> {
+  async activateSession(sessionId: string): Promise<void> {
     try {
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId }
+      })
+      
+      if (!session) {
+        throw new Error('Session not found')
+      }
+      
+      if (session.status !== 'scheduled') {
+        throw new Error('Only scheduled sessions can be activated')
+      }
+
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { 
+          status: 'active',
+          startTime: new Date() // Update actual start time when activated
+        }
+      })
+    } catch (error) {
+      console.error('Error activating session:', error)
+      throw error instanceof Error ? error : new Error('Failed to activate session')
+    }
+  }
+
+  /**
+   * Create an instant session that immediately starts and sends notifications
+   */
+  async createInstantSession(havrutaId: string, creatorUserId: string): Promise<SessionWithRelations> {
+    try {
+      // Verify user is the Havruta owner
+      const havruta = await prisma.havruta.findUnique({
+        where: { id: havrutaId },
+        include: {
+          owner: true,
+          participants: {
+            include: { user: true }
+          }
+        }
+      })
+
+      if (!havruta) {
+        throw new Error('Havruta not found')
+      }
+      if (!havruta.isActive) {
+        throw new Error('Cannot create session for inactive Havruta')
+      }
+      if (havruta.ownerId !== creatorUserId) {
+        throw new Error('Only the Havruta owner can create instant sessions')
+      }
+
+      // Check if there's already an active session - this is critical validation
+      const existingActiveSession = await prisma.session.findFirst({
+        where: {
+          havrutaId,
+          status: { in: ['active', 'scheduled'] }
+        }
+      })
+
+      if (existingActiveSession) {
+        throw new Error('There is already an active session for this Havruta')
+      }
+
+      // Create instant session
+      const session = await this.initializeSession({
+        havrutaId,
+        type: 'instant',
+        startTime: new Date(),
+        participantIds: havruta.participants.map(p => p.userId)
+      })
+
+      // Send real-time notifications to all participants (excluding creator)
+      if (this.notificationService) {
+        try {
+          await this.notificationService.sendInstantSessionInvitations(session.id, creatorUserId)
+        } catch (notificationError) {
+          console.error('Error sending instant session notifications:', notificationError)
+          // Don't fail the session creation if notifications fail
+        }
+      }
+
+      return session
+    } catch (error) {
+      console.error('Error creating instant session:', error)
+      throw error instanceof Error ? error : new Error('Failed to create instant session')
+    }
+  }
+
+  /**
+   * End a session with coverage range tracking
+   */
+  async endSession(sessionId: string, userId: string, data: EndSessionData): Promise<void> {
+    try {
+      // Validate input data
+      const validatedData = endSessionSchema.parse(data)
+      const { endingSection, coverageRange } = validatedData
+
       // Verify session exists and is active
       const session = await prisma.session.findUnique({
         where: { id: sessionId },
@@ -343,30 +494,38 @@ export class SessionService {
       if (!session) {
         throw new Error('Session not found')
       }
-      if (session.endTime) {
+      if (session.status === 'completed' || session.status === 'cancelled') {
         throw new Error('Session has already ended')
       }
 
-      // Check if user has permission to end session (creator or participant)
-      const hasPermission = session.havruta.creatorId === userId || 
-        await prisma.sessionParticipant.findFirst({
-          where: {
-            sessionId,
-            userId,
-            leftAt: null
+      // Check if user is the Havruta owner (only owner can end sessions)
+      if (session.havruta.ownerId !== userId) {
+        throw new Error('Only the Havruta owner can end sessions')
+      }
+
+      const endTime = new Date()
+      const finalCoverageRange = coverageRange || `${session.startingSection} to ${endingSection}`
+
+      // End session and update Havruta progress
+      await prisma.$transaction(async (tx) => {
+        // End the session with coverage tracking
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { 
+            status: 'completed',
+            endTime,
+            endingSection,
+            coverageRange: finalCoverageRange
           }
         })
 
-      if (!hasPermission) {
-        throw new Error('User does not have permission to end this session')
-      }
-
-      // End session and mark all active participants as left
-      await prisma.$transaction(async (tx) => {
-        // End the session
-        await tx.session.update({
-          where: { id: sessionId },
-          data: { endTime: new Date() }
+        // Update Havruta's lastPlace to the owner's final location
+        await tx.havruta.update({
+          where: { id: session.havrutaId },
+          data: {
+            lastPlace: endingSection,
+            lastStudiedAt: endTime
+          }
         })
 
         // Mark all active participants as left
@@ -375,10 +534,13 @@ export class SessionService {
             sessionId,
             leftAt: null
           },
-          data: { leftAt: new Date() }
+          data: { leftAt: endTime }
         })
       })
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new Error(`Validation error: ${error.errors.map(e => e.message).join(', ')}`)
+      }
       console.error('Error ending session:', error)
       throw error instanceof Error ? error : new Error('Failed to end session')
     }
@@ -418,10 +580,14 @@ export class SessionService {
       return {
         id: session.id,
         havrutaId: session.havrutaId,
-        isActive: !session.endTime,
+        type: session.type,
+        status: session.status,
+        isActive: session.status === 'active',
         startTime: session.startTime,
         endTime: session.endTime,
-        currentSection: session.havruta.currentSection,
+        startingSection: session.startingSection,
+        endingSection: session.endingSection,
+        coverageRange: session.coverageRange,
         sectionsStudied: session.sectionsStudied,
         activeParticipants: session.participants.map(p => ({
           userId: p.user.id,
@@ -533,12 +699,11 @@ export class SessionService {
         }
       })
 
-      // Update Havruta's current section if provided
+      // Update Havruta's last studied time if current section is provided
       if (validatedData.currentSection) {
         await prisma.havruta.update({
           where: { id: havrutaId },
           data: {
-            currentSection: validatedData.currentSection,
             lastStudiedAt: new Date()
           }
         })
@@ -560,12 +725,12 @@ export class SessionService {
       const session = await prisma.session.findFirst({
         where: {
           havrutaId,
-          endTime: null
+          status: { in: ['active', 'scheduled'] }
         },
         include: {
           havruta: {
             include: {
-              creator: {
+              owner: {
                 select: {
                   id: true,
                   name: true,
@@ -608,7 +773,7 @@ export class SessionService {
     try {
       const sessions = await prisma.session.findMany({
         where: {
-          endTime: null,
+          status: { in: ['active', 'scheduled'] },
           participants: {
             some: {
               userId,
@@ -619,7 +784,7 @@ export class SessionService {
         include: {
           havruta: {
             include: {
-              creator: {
+              owner: {
                 select: {
                   id: true,
                   name: true,
@@ -679,7 +844,7 @@ export class SessionService {
         include: {
           havruta: {
             include: {
-              creator: {
+              owner: {
                 select: {
                   id: true,
                   name: true,
@@ -727,7 +892,7 @@ export class SessionService {
       // Find sessions that have been active for too long
       const inactiveSessions = await prisma.session.findMany({
         where: {
-          endTime: null,
+          status: 'active',
           startTime: {
             lt: cutoffTime
           }
@@ -747,7 +912,10 @@ export class SessionService {
           where: {
             id: { in: sessionIds }
           },
-          data: { endTime: new Date() }
+          data: { 
+            status: 'completed',
+            endTime: new Date() 
+          }
         })
 
         // Mark all active participants as left
@@ -784,6 +952,59 @@ export class SessionService {
     } catch (error) {
       console.error('Error checking session access:', error)
       return false
+    }
+  }
+
+  /**
+   * Clean up old instant sessions that are still active
+   */
+  async cleanupOldInstantSessions(): Promise<void> {
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000) // 1 hour ago
+      
+      // Find instant sessions that are still active but started more than 1 hour ago
+      const oldInstantSessions = await prisma.session.findMany({
+        where: {
+          type: 'instant',
+          status: 'active',
+          startTime: {
+            lt: oneHourAgo
+          }
+        }
+      })
+
+      if (oldInstantSessions.length > 0) {
+        console.log(`Cleaning up ${oldInstantSessions.length} old instant sessions`)
+        
+        // End these sessions
+        await prisma.$transaction(async (tx) => {
+          const endTime = new Date()
+          
+          for (const session of oldInstantSessions) {
+            // End the session
+            await tx.session.update({
+              where: { id: session.id },
+              data: { 
+                status: 'completed',
+                endTime,
+                endingSection: session.startingSection || 'Session auto-ended',
+                coverageRange: 'Auto-ended due to inactivity'
+              }
+            })
+
+            // Mark all active participants as left
+            await tx.sessionParticipant.updateMany({
+              where: {
+                sessionId: session.id,
+                leftAt: null
+              },
+              data: { leftAt: endTime }
+            })
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error cleaning up old instant sessions:', error)
     }
   }
 }

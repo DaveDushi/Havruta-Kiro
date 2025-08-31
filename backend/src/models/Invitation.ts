@@ -21,7 +21,7 @@ export interface InvitationWithRelations extends Invitation {
     id: string
     name: string
     bookTitle: string
-    creatorId: string
+    ownerId: string
   }
 }
 

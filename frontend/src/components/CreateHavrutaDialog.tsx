@@ -28,7 +28,7 @@ interface CreateHavrutaDialogProps {
     name: string
     bookId: string
     bookTitle: string
-    currentSection?: string
+    lastPlace?: string
   }) => Promise<void>
 }
 
@@ -81,7 +81,7 @@ export const CreateHavrutaDialog: React.FC<CreateHavrutaDialogProps> = ({
     name: '',
     bookId: '',
     bookTitle: '',
-    currentSection: '',
+    lastPlace: '',
   })
   const [selectedBook, setSelectedBook] = useState<SefariaIndex | null>(null)
   const [indexData, setIndexData] = useState<SefariaCategory[]>([])
@@ -141,7 +141,7 @@ export const CreateHavrutaDialog: React.FC<CreateHavrutaDialogProps> = ({
         ...prev,
         bookId: book.title,
         bookTitle: book.title,
-        currentSection: startingSections[0],
+        lastPlace: startingSections[0],
       }))
       
       // Auto-generate name if empty
@@ -213,14 +213,14 @@ export const CreateHavrutaDialog: React.FC<CreateHavrutaDialogProps> = ({
       ...prev,
       bookId: '',
       bookTitle: '',
-      currentSection: '',
+      lastPlace: '',
     }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.name.trim() || !formData.bookId || !formData.currentSection) {
+    if (!formData.name.trim() || !formData.bookId || !formData.lastPlace) {
       setError('Please fill in all required fields')
       return
     }
@@ -234,7 +234,7 @@ export const CreateHavrutaDialog: React.FC<CreateHavrutaDialogProps> = ({
           name: formData.name.trim(),
           bookId: formData.bookId,
           bookTitle: formData.bookTitle,
-          currentSection: formData.currentSection,
+          lastPlace: formData.lastPlace,
         })
       } else {
         // Fallback to direct service call
@@ -243,7 +243,7 @@ export const CreateHavrutaDialog: React.FC<CreateHavrutaDialogProps> = ({
           name: formData.name.trim(),
           bookId: formData.bookId,
           bookTitle: formData.bookTitle,
-          currentSection: formData.currentSection,
+          lastPlace: formData.lastPlace,
         })
       }
 

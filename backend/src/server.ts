@@ -19,6 +19,8 @@ import { WebSocketService } from './services/websocketService'
 import { SyncService } from './services/syncService'
 import { schedulingService } from './services/schedulingService'
 import { monitoringService } from './services/monitoringService'
+import { notificationService } from './services/notificationService'
+import { sessionService } from './services/sessionService'
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
 import havrutotRoutes from './routes/havrutot'
@@ -154,36 +156,50 @@ app.get('/api/metrics', async (req, res) => {
   }
 })
 
-// Initialize WebSocket and Sync services
-const websocketService = new WebSocketService(io)
-const syncService = new SyncService(websocketService)
+// Initialize services asynchronously
+async function initializeServer() {
+  // Initialize WebSocket and Sync services
+  const websocketService = new WebSocketService(io)
+  await websocketService.initialize() // Initialize Redis connection
+  const syncService = new SyncService(websocketService)
 
-// Set sync service reference in websocket service
-websocketService.setSyncService(syncService)
+  // Set up service dependencies
+  websocketService.setSyncService(syncService)
+  notificationService.setWebSocketService(websocketService)
+  sessionService.setNotificationService(notificationService)
 
-// Initialize background job system for scheduling
-schedulingService.initializeBackgroundJobs()
+  // Initialize background job system for scheduling
+  schedulingService.initializeBackgroundJobs()
 
-// Cleanup inactive rooms and sync data every 30 minutes
-setInterval(() => {
-  websocketService.cleanupInactiveRooms(60)
-  syncService.cleanupInactiveSessions()
-}, 30 * 60 * 1000)
+  // Cleanup inactive rooms and sync data every 30 minutes
+  setInterval(() => {
+    websocketService.cleanupInactiveRooms(60)
+    syncService.cleanupInactiveSessions()
+    sessionService.cleanupOldInstantSessions()
+  }, 30 * 60 * 1000)
 
-// Error handling middleware (must be last)
-app.use(notFoundHandler)
-app.use(errorHandler)
+  // Error handling middleware (must be last)
+  app.use(notFoundHandler)
+  app.use(errorHandler)
 
-server.listen(PORT, () => {
-  logger.info(`Server started successfully`, {
-    port: PORT,
-    environment: process.env.NODE_ENV || 'development',
-    nodeVersion: process.version
+  server.listen(PORT, () => {
+    logger.info(`Server started successfully`, {
+      port: PORT,
+      environment: process.env.NODE_ENV || 'development',
+      nodeVersion: process.version,
+      tunnelUrl: process.env.FRONTEND_URL || 'Not configured'
+    })
   })
-})
 
-// Setup graceful shutdown
-gracefulShutdown(server)
+  // Setup graceful shutdown
+  gracefulShutdown(server, websocketService)
+}
+
+// Start the server
+initializeServer().catch((error) => {
+  logger.error('Failed to initialize server:', error)
+  process.exit(1)
+})
 
 // Handle uncaught exceptions and unhandled rejections
 process.on('uncaughtException', (error: Error) => {

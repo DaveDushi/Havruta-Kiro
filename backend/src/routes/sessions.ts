@@ -35,6 +35,65 @@ router.post('/', async (req: Request, res: Response) => {
 })
 
 /**
+ * POST /api/sessions/instant
+ * Create an instant session for a Havruta
+ */
+router.post('/instant', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id
+    const { havrutaId } = req.body
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    if (!havrutaId) {
+      return res.status(400).json({ error: 'Havruta ID is required' })
+    }
+
+    const session = await sessionService.createInstantSession(havrutaId, userId)
+    res.status(201).json(session)
+  } catch (error) {
+    console.error('Error creating instant session:', error)
+    const message = error instanceof Error ? error.message : 'Failed to create instant session'
+    const statusCode = message.includes('not found') ? 404 : 
+                      message.includes('inactive') || message.includes('already an active') || 
+                      message.includes('owner') ? 400 : 500
+    res.status(statusCode).json({ error: message })
+  }
+})
+
+/**
+ * POST /api/sessions/:id/activate
+ * Activate a scheduled session
+ */
+router.post('/:id/activate', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id
+    const sessionId = req.params.id
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    // Check if user has access to this session
+    const hasAccess = await sessionService.hasSessionAccess(sessionId, userId)
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this session' })
+    }
+
+    await sessionService.activateSession(sessionId)
+    res.status(204).send()
+  } catch (error) {
+    console.error('Error activating session:', error)
+    const message = error instanceof Error ? error.message : 'Failed to activate session'
+    const statusCode = message.includes('not found') ? 404 : 
+                      message.includes('Only scheduled') ? 400 : 500
+    res.status(statusCode).json({ error: message })
+  }
+})
+
+/**
  * GET /api/sessions/active
  * Get user's active sessions
  */
@@ -144,6 +203,44 @@ router.post('/:id/join', async (req: Request, res: Response) => {
 })
 
 /**
+ * POST /api/sessions/:id/join-instant
+ * One-click join for instant sessions with session details
+ */
+router.post('/:id/join-instant', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id
+    const sessionId = req.params.id
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    // Join the session
+    const participant = await sessionService.joinSession({ userId, sessionId })
+    
+    // Get full session details for immediate use
+    const session = await sessionService.getSessionById(sessionId)
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found after joining' })
+    }
+
+    // Return both participant info and session details for one-click experience
+    res.status(201).json({
+      participant,
+      session,
+      redirectUrl: `/havruta/${session.havrutaId}/session/${sessionId}`
+    })
+  } catch (error) {
+    console.error('Error joining instant session:', error)
+    const message = error instanceof Error ? error.message : 'Failed to join instant session'
+    const statusCode = message.includes('not found') ? 404 : 
+                      message.includes('ended') || message.includes('already in') || 
+                      message.includes('not a participant') ? 400 : 500
+    res.status(statusCode).json({ error: message })
+  }
+})
+
+/**
  * POST /api/sessions/:id/leave
  * Leave a session
  */
@@ -169,24 +266,31 @@ router.post('/:id/leave', async (req: Request, res: Response) => {
 
 /**
  * POST /api/sessions/:id/end
- * End a session
+ * End a session with coverage tracking
  */
 router.post('/:id/end', async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id
     const sessionId = req.params.id
+    const { endingSection, coverageRange } = req.body
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' })
     }
 
-    await sessionService.endSession(sessionId, userId)
+    if (!endingSection) {
+      return res.status(400).json({ error: 'Ending section is required' })
+    }
+
+    await sessionService.endSession(sessionId, userId, { endingSection, coverageRange })
     res.status(204).send()
   } catch (error) {
     console.error('Error ending session:', error)
     const message = error instanceof Error ? error.message : 'Failed to end session'
     const statusCode = message.includes('not found') ? 404 : 
-                      message.includes('already ended') || message.includes('permission') ? 403 : 500
+                      message.includes('already ended') || message.includes('permission') || 
+                      message.includes('owner') ? 403 : 
+                      message.includes('Validation error') ? 400 : 500
     res.status(statusCode).json({ error: message })
   }
 })

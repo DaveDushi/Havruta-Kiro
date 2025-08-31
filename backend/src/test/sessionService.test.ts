@@ -23,7 +23,7 @@ describe('SessionService', () => {
     await prisma.session.deleteMany({
       where: {
         havruta: {
-          creator: {
+          owner: {
             email: {
               startsWith: 'test-session-'
             }
@@ -100,7 +100,7 @@ describe('SessionService', () => {
       name: 'Test Session Havruta',
       bookId: 'genesis',
       bookTitle: 'Genesis',
-      creatorId: testUsers[0].id,
+      ownerId: testUsers[0].id,
       participantIds: [testUsers[1].id, testUsers[2].id]
     }
     testHavruta = await havrutaService.createHavruta(havrutaData)
@@ -120,7 +120,7 @@ describe('SessionService', () => {
     await prisma.session.deleteMany({
       where: {
         havruta: {
-          creator: {
+          owner: {
             email: {
               startsWith: 'test-session-'
             }
@@ -148,7 +148,7 @@ describe('SessionService', () => {
     })
     await prisma.havruta.deleteMany({
       where: {
-        creator: {
+        owner: {
           email: {
             startsWith: 'test-session-'
           }

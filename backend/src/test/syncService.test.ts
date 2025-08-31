@@ -26,7 +26,7 @@ describe('SyncService', () => {
     name: 'Test Havruta',
     bookId: 'Genesis',
     bookTitle: 'Genesis',
-    creatorId: 'user-1',
+    ownerId: 'user-1',
     participants: ['user-1', 'user-2'],
     currentSection: 'Genesis 1:1',
     isActive: true,

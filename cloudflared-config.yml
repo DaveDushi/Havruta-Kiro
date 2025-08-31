@@ -1,0 +1,7 @@
+tunnel: havruta-tunnel
+credentials-file: /path/to/credentials.json
+
+ingress:
+  - hostname: havruta.daviddusi.com
+    service: http://localhost:3000
+  - service: http_status:404

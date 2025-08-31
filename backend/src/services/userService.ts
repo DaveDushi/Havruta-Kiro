@@ -201,7 +201,7 @@ export class UserService {
     try {
       const [created, participating, active] = await Promise.all([
         prisma.havruta.count({
-          where: { creatorId: userId }
+          where: { ownerId: userId }
         }),
         prisma.havrutaParticipant.count({
           where: { userId }
@@ -210,7 +210,7 @@ export class UserService {
           where: {
             isActive: true,
             OR: [
-              { creatorId: userId },
+              { ownerId: userId },
               { participants: { some: { userId } } }
             ]
           }

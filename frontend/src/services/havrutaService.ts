@@ -77,7 +77,7 @@ class HavrutaService {
     name: string
     bookId: string
     bookTitle: string
-    currentSection?: string
+    lastPlace?: string
   }): Promise<Havruta> {
     return this.makeRequest<Havruta>('/havrutot', {
       method: 'POST',
@@ -110,10 +110,10 @@ class HavrutaService {
     })
   }
 
-  async updateProgress(id: string, currentSection: string): Promise<void> {
+  async updateProgress(id: string, lastPlace: string): Promise<void> {
     await this.makeRequest<void>(`/havrutot/${id}/progress`, {
       method: 'PUT',
-      body: JSON.stringify({ currentSection }),
+      body: JSON.stringify({ lastPlace }),
     })
   }
 

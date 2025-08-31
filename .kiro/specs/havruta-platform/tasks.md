@@ -13,17 +13,20 @@
   - Configure development scripts and build processes
   - _Requirements: Foundation for all requirements_
 
-- [x] 2. Implement database schema and models
+- [x] 2. Update database schema for enhanced session management
 
 
 
 
 
-  - Set up PostgreSQL database with Prisma ORM
-  - Create database schema for User, Havruta, Session, RecurrencePattern, and Progress models
-  - Generate Prisma client and database migration files
-  - Write database seed scripts for development data
-  - _Requirements: 1.1, 2.1, 6.1, 7.1, 8.1_
+
+
+  - Update Havruta model to include ownerId and lastPlace fields
+  - Modify Session model to track startingSection, endingSection, coverageRange, and type (scheduled/instant)
+  - Add session status field and proper indexing for active session queries
+  - Create database migration scripts for existing data
+  - Update Prisma client generation and seed scripts with new session workflow data
+  - _Requirements: 2.6, 2A.2, 3A.3, 3A.5, 5A.6, 3B.2_
 
 - [x] 3. Create authentication system
 
@@ -73,14 +76,43 @@
   - Write unit tests for Havruta service methods
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [x] 6.2 Implement session state management
+- [x] 6.2 Implement session state management and lifecycle
 
 
-  - Create session initialization and cleanup logic
-  - Build progress tracking and automatic saving functionality
-  - Implement session participant management (join/leave)
-  - Write integration tests for session lifecycle
-  - _Requirements: 3.1, 3.2, 3.4, 7.3_
+
+
+
+  - Create session initialization logic that loads Havruta's lastPlace as starting section
+  - Build session progress tracking that updates currentSection during navigation
+  - Implement "End Session" functionality that saves coverage range and updates Havruta lastPlace
+  - Create session participant management (join/leave) with owner privilege checks
+  - Write integration tests for complete session lifecycle from creation to completion
+  - _Requirements: 3.1, 3.2, 3.4, 3A.1, 3A.3, 3A.5, 3A.7_
+
+- [x] 6.3 Implement instant session creation
+
+
+
+
+
+
+
+  - Create instant session service that immediately creates and opens sessions
+  - Build real-time notification system for instant session invitations
+  - Implement one-click join functionality for instant session participants
+  - Add validation to prevent multiple active sessions per Havruta
+  - Write unit tests for instant session creation and notification flow
+  - _Requirements: 5A.1, 5A.2, 5A.3, 5A.4, 5A.7_
+
+- [ ] 6.4 Build session history and progress tracking
+
+
+  - Implement session history storage with coverage ranges (e.g., "Genesis 1:1 to Genesis 2:1")
+  - Create session history API endpoints with filtering and pagination
+  - Build progress calculation service that tracks Havruta lastPlace updates
+  - Add session type tracking (scheduled vs instant) in history
+  - Write integration tests for session history and progress persistence
+  - _Requirements: 3A.5, 3B.1, 3B.2, 3B.4, 5A.6_
 
 - [x] 7. Create real-time synchronization system
 
@@ -97,13 +129,38 @@
   - _Requirements: 3.3, 4.2_
 
 
-- [x] 7.2 Implement text navigation synchronization
+- [x] 7.2 Implement WebSocket session room management
 
-  - Create SyncService for broadcasting navigation events
-  - Build client-side synchronization handlers
-  - Add conflict resolution for concurrent navigation
-  - Write integration tests for real-time synchronization
-  - _Requirements: 3.3, 4.2_
+
+
+
+
+
+
+  - Create WebSocketRoomService with room join/leave functionality
+  - Implement session room state management using Redis for scalability
+  - Build participant tracking and real-time join/leave notifications
+  - Add automatic room cleanup for empty sessions after timeout
+  - Write unit tests for room management and participant tracking
+  - _Requirements: 10.1, 10.2, 10.3, 10.8_
+
+- [ ] 7.3 Implement owner-based navigation synchronization through rooms
+
+  - Update navigation sync to use room-based broadcasting
+  - Build client-side handlers that sync all room participants to owner's navigation
+  - Implement session progress updates that only save when owner navigates
+  - Add real-time session end broadcasting to all room participants
+  - Write integration tests for room-based navigation and progress saving
+  - _Requirements: 2A.5, 2A.6, 3.4, 3A.3, 3A.4, 10.4, 10.5, 10.6_
+
+- [ ] 7.4 Add WebSocket connection management and reconnection
+
+  - Implement automatic reconnection logic for dropped WebSocket connections
+  - Build session room rejoin functionality after reconnection
+  - Add connection state tracking and heartbeat monitoring
+  - Create fallback mechanisms for network interruptions
+  - Write integration tests for connection drops and automatic recovery
+  - _Requirements: 10.7_
 
 - [x] 8. Build scheduling system
 
@@ -173,23 +230,16 @@
   - Write unit tests for dashboard components
   - _Requirements: 6.1, 6.3_
 
-- [x] 10.2 Implement Havruta management interface
+- [ ] 10.2 Implement enhanced Havruta management interface
 
 
-
-
-
-
-
-
-
-
-  - Create Havruta list component with filtering and sorting
-  - Build "Next Up" section for scheduled sessions
-  - Implement quick action buttons (join collaborative, invite participants)
-  - Remove "Study Solo" button from Havruta cards to focus on collaborative learning
-  - Write integration tests for dashboard interactions
-  - _Requirements: 6.1, 6.2, 6.3, 6.5_
+  - Create Havruta cards showing book, participants, and current lastPlace location
+  - Build "Start Instant Session" button alongside existing scheduling options
+  - Implement active session indicators and "Join Active Session" functionality
+  - Add session history viewer accessible from Havruta cards
+  - Create "Next Up" section for scheduled sessions with instant session notifications
+  - Write integration tests for instant session creation and joining workflows
+  - _Requirements: 2A.1, 2A.2, 5A.1, 5A.3, 6.1, 6.2, 6.3_
 -
 
 - [x] 10.3 Create participant invitation system
@@ -221,16 +271,26 @@
   - Write unit tests for text viewer interactions
   - _Requirements: 4.1, 4.2_
 
-- [x] 11.2 Implement collaborative text navigation
+- [ ] 11.2 Implement owner-controlled collaborative navigation
 
 
+  - Connect text viewer to owner-based synchronization system
+  - Build UI indicators showing owner vs participant status
+  - Implement "End Session" button visible only to session owner
+  - Add session progress display showing coverage range and current location
+  - Create automatic navigation sync that follows owner's movements
+  - Write integration tests for owner-controlled navigation and session ending
+  - _Requirements: 2A.5, 2A.6, 3.3, 3A.1, 3A.4, 4.2_
+
+- [ ] 11.3 Build session history and progress UI
 
 
-  - Connect text viewer to real-time synchronization
-  - Build participant cursor/position indicators
-  - Add navigation conflict resolution UI
-  - Write integration tests for collaborative features
-  - _Requirements: 3.3, 4.2_
+  - Create session history component showing past sessions with coverage ranges
+  - Build session details view with date, duration, participants, and sections covered
+  - Implement current session progress indicator showing starting point and current location
+  - Add session type indicators (scheduled vs instant) in history display
+  - Write unit tests for session history display and interaction
+  - _Requirements: 3B.1, 3B.2, 3B.3, 3B.5, 3B.6_
 
 - [ ] 12. Integrate WebRTC video calling
 
@@ -259,6 +319,15 @@
   - Build error handling and reconnection logic
   - Write integration tests for video call scenarios
   - _Requirements: 5.3, 5.5_
+
+- [ ] 12.3 Integrate WebRTC with WebSocket session rooms
+
+  - Coordinate WebRTC offer/answer exchange through session rooms
+  - Implement ICE candidate sharing via WebSocket room broadcasts
+  - Add WebRTC connection establishment when users join session rooms
+  - Build video call state synchronization across room participants
+  - Write integration tests for WebRTC coordination through WebSocket rooms
+  - _Requirements: 10.9_
 
 - [ ] 13. Create progress tracking system
 - [ ] 13.1 Implement progress calculation and storage

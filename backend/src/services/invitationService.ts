@@ -1,7 +1,7 @@
 import { Invitation } from '@prisma/client'
 import { prisma } from '../utils/database'
 import { emailService } from './emailService'
-import { userService } from './userService'
+
 import { z } from 'zod'
 import crypto from 'crypto'
 
@@ -17,13 +17,13 @@ export interface InvitationWithRelations extends Invitation {
     id: string
     name: string
     email: string
-    profilePicture?: string
+    profilePicture?: string | null
   }
   havruta: {
     id: string
     name: string
     bookTitle: string
-    creatorId: string
+    ownerId: string
   }
 }
 
@@ -71,7 +71,7 @@ export class InvitationService {
       const havruta = await prisma.havruta.findUnique({
         where: { id: havrutaId },
         include: {
-          creator: {
+          owner: {
             select: {
               id: true,
               name: true,
@@ -93,8 +93,8 @@ export class InvitationService {
         throw new Error('Havruta not found')
       }
 
-      // Check if inviter is a participant (creator or member)
-      const isParticipant = havruta.creatorId === inviterUserId || 
+      // Check if inviter is a participant (owner or member)
+      const isParticipant = havruta.ownerId === inviterUserId || 
         havruta.participants.some(p => p.user.email === inviterUserId)
       
       if (!isParticipant) {
@@ -107,7 +107,7 @@ export class InvitationService {
           throw new Error('Inviter not found')
         }
 
-        const isParticipantByUserId = havruta.creatorId === inviterUserId || 
+        const isParticipantByUserId = havruta.ownerId === inviterUserId || 
           havruta.participants.some(p => p.userId === inviterUserId)
 
         if (!isParticipantByUserId) {
@@ -117,7 +117,7 @@ export class InvitationService {
 
       // Get current participant emails to avoid duplicate invitations
       const currentParticipantEmails = new Set([
-        havruta.creator.email,
+        havruta.owner.email,
         ...havruta.participants.map(p => p.user.email)
       ])
 
@@ -238,7 +238,7 @@ export class InvitationService {
                 havrutaId,
                 havrutaName: havruta.name,
                 bookTitle: havruta.bookTitle,
-                inviterName: havruta.creator.name,
+                inviterName: havruta.owner.name,
                 joinLink,
                 invitationToken
               }, true) // isNewUser = true
@@ -425,7 +425,7 @@ export class InvitationService {
               id: true,
               name: true,
               bookTitle: true,
-              creatorId: true
+              ownerId: true
             }
           }
         }
@@ -459,7 +459,7 @@ export class InvitationService {
               id: true,
               name: true,
               bookTitle: true,
-              creatorId: true
+              ownerId: true
             }
           }
         },

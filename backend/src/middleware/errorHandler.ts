@@ -257,15 +257,24 @@ export const asyncHandler = (fn: Function) => {
 }
 
 // Graceful shutdown handler
-export const gracefulShutdown = (server: any) => {
-  const shutdown = (signal: string) => {
+export const gracefulShutdown = (server: any, websocketService?: any) => {
+  const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}, starting graceful shutdown`)
     
-    server.close(() => {
+    server.close(async () => {
       logger.info('HTTP server closed')
       
+      // Close WebSocket service and Redis connections
+      if (websocketService) {
+        try {
+          await websocketService.shutdown()
+          logger.info('WebSocket service shutdown completed')
+        } catch (error) {
+          logger.error('Error shutting down WebSocket service:', error)
+        }
+      }
+      
       // Close database connections
-      // Close Redis connections
       // Close any other resources
       
       logger.info('Graceful shutdown completed')

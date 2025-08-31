@@ -31,6 +31,7 @@ import {
   FilterList,
   Sort,
   PersonAdd,
+  Bolt,
 } from '@mui/icons-material'
 import { useAuth } from '../contexts/AuthContext'
 import { useDashboardData } from '../hooks/useDashboardData'
@@ -39,10 +40,12 @@ import { sessionService } from '../services/sessionService'
 import { CreateHavrutaDialog } from '../components/CreateHavrutaDialog'
 import { ParticipantInvitationDialog } from '../components/ParticipantInvitationDialog'
 import SessionSchedulingDialog from '../components/SessionSchedulingDialog'
+import InstantSessionNotification from '../components/InstantSessionNotification'
 import { Havruta } from '../types'
 import { useNavigate } from 'react-router-dom'
 import { testLogin, isTestMode } from '../utils/testAuth'
 import { runWebRTCTests } from '../utils/webrtcTest'
+import { socketService, InstantSessionInvitation } from '../services/socketService'
 
 const DashboardPage: React.FC = () => {
   const { state: authState } = useAuth()
@@ -63,10 +66,12 @@ const DashboardPage: React.FC = () => {
   const [schedulingDialogOpen, setSchedulingDialogOpen] = React.useState(false)
   const [selectedHavrutaForInvitation, setSelectedHavrutaForInvitation] = React.useState<Havruta | null>(null)
   const [selectedHavrutaForScheduling, setSelectedHavrutaForScheduling] = React.useState<Havruta | null>(null)
+  const [instantSessionInvitation, setInstantSessionInvitation] = React.useState<InstantSessionInvitation | null>(null)
 
   // Use the dashboard data hook
   const {
     havrutot,
+    activeSessions,
     upcomingSessions,
     nextSession,
     statistics,
@@ -77,6 +82,28 @@ const DashboardPage: React.FC = () => {
     scheduleSession,
     createHavruta,
   } = useDashboardData()
+
+  // Set up WebSocket connection and instant session notifications
+  React.useEffect(() => {
+    if (authState.user && authState.isAuthenticated) {
+      // Connect to WebSocket for real-time notifications
+      socketService.connect(authState.user).catch(error => {
+        console.error('Failed to connect to WebSocket:', error)
+      })
+
+      // Listen for instant session invitations
+      const handleInstantSessionInvitation = (invitation: InstantSessionInvitation) => {
+        console.log('Received instant session invitation:', invitation)
+        setInstantSessionInvitation(invitation)
+      }
+
+      socketService.on('instant-session-invitation', handleInstantSessionInvitation)
+
+      return () => {
+        socketService.off('instant-session-invitation', handleInstantSessionInvitation)
+      }
+    }
+  }, [authState.user, authState.isAuthenticated])
 
   // Filter and sort upcoming sessions
   const filteredAndSortedSessions = React.useMemo(() => {
@@ -182,14 +209,14 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
         const params = new URLSearchParams({
           sessionId: havrutaId, // This is actually the havruta ID for WebSocket connection
           collaborative: 'true',
-          ref: havruta.currentSection
+          ref: havruta.lastPlace
         })
         const url = `/study/${encodeURIComponent(havruta.bookTitle)}?${params.toString()}`
         console.log('🚀 Joining collaborative session:', {
           havrutaId,
           havrutaName: havruta.name,
           bookTitle: havruta.bookTitle,
-          currentSection: havruta.currentSection,
+          lastPlace: havruta.lastPlace,
           url,
           user: authState.user ? { id: authState.user.id, name: authState.user.name } : null
         })
@@ -244,6 +271,97 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
       console.error('Error sending invitations:', error)
       throw error
     }
+  }
+
+  // Helper function to check if a Havruta has an active session
+  const getActiveSessionForHavruta = (havrutaId: string) => {
+    return activeSessions.find(session => session.havrutaId === havrutaId)
+  }
+
+  const handleStartInstantSession = async (havrutaId: string) => {
+    try {
+      const session = await sessionService.createInstantSession(havrutaId)
+      
+      // Refresh dashboard data to update button states
+      await refetch()
+      
+      setSnackbar({
+        open: true,
+        message: 'Instant session started! Participants have been notified.',
+        severity: 'success'
+      })
+
+      // Navigate to the session immediately
+      const havruta = havrutot.find(h => h.id === havrutaId)
+      if (havruta) {
+        const params = new URLSearchParams({
+          sessionId: session.id,
+          collaborative: 'true',
+          ref: havruta.lastPlace
+        })
+        const url = `/study/${encodeURIComponent(havruta.bookTitle)}?${params.toString()}`
+        navigate(url)
+      }
+    } catch (error) {
+      console.error('Error starting instant session:', error)
+      setSnackbar({
+        open: true,
+        message: 'Failed to start instant session: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        severity: 'error'
+      })
+    }
+  }
+
+  const handleJoinActiveSession = async (havrutaId: string) => {
+    try {
+      const activeSession = getActiveSessionForHavruta(havrutaId)
+      if (!activeSession) {
+        throw new Error('No active session found')
+      }
+
+      // Join the existing session
+      await sessionService.joinSession(activeSession.id)
+      
+      // Refresh dashboard data to update button states
+      await refetch()
+      
+      setSnackbar({
+        open: true,
+        message: 'Joining active session...',
+        severity: 'info'
+      })
+
+      // Navigate to the session
+      const havruta = havrutot.find(h => h.id === havrutaId)
+      if (havruta) {
+        const params = new URLSearchParams({
+          sessionId: activeSession.id,
+          collaborative: 'true',
+          ref: havruta.lastPlace
+        })
+        const url = `/study/${encodeURIComponent(havruta.bookTitle)}?${params.toString()}`
+        navigate(url)
+      }
+    } catch (error) {
+      console.error('Error joining active session:', error)
+      setSnackbar({
+        open: true,
+        message: 'Failed to join session: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        severity: 'error'
+      })
+    }
+  }
+
+  const handleInstantSessionJoin = (sessionId: string) => {
+    setSnackbar({
+      open: true,
+      message: 'Joining instant session...',
+      severity: 'info'
+    })
+  }
+
+  const handleCloseInstantSessionNotification = () => {
+    setInstantSessionInvitation(null)
   }
 
   const toggleSortOrder = () => {
@@ -436,18 +554,42 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
                     Scheduled for {nextSession.scheduledTime.toLocaleString()}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Continue from {nextSession.currentSection}
+                    Continue from {nextSession.lastPlace}
                   </Typography>
                 </Box>
-                <Button
-                  variant="contained"
-                  size="large"
-                  startIcon={<PlayArrow />}
-                  onClick={() => handleJoinHavruta(nextSession.id)}
-                  sx={{ minWidth: isMobile ? '100%' : 'auto' }}
-                >
-                  Join Session
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    startIcon={<PlayArrow />}
+                    onClick={() => handleJoinHavruta(nextSession.id)}
+                    sx={{ minWidth: isMobile ? '100%' : 'auto' }}
+                  >
+                    Join Session
+                  </Button>
+                  {(() => {
+                    const activeSession = getActiveSessionForHavruta(nextSession.id)
+                    return (
+                      <Button
+                        variant="outlined"
+                        size="large"
+                        startIcon={activeSession ? <PlayArrow /> : <Bolt />}
+                        onClick={() => activeSession ? handleJoinActiveSession(nextSession.id) : handleStartInstantSession(nextSession.id)}
+                        sx={{ 
+                          minWidth: isMobile ? '100%' : 'auto',
+                          borderColor: activeSession ? theme.palette.success.main : theme.palette.warning.main,
+                          color: activeSession ? theme.palette.success.main : theme.palette.warning.main,
+                          '&:hover': {
+                            borderColor: activeSession ? theme.palette.success.dark : theme.palette.warning.dark,
+                            backgroundColor: activeSession ? theme.palette.success.light : theme.palette.warning.light,
+                          }
+                        }}
+                      >
+                        {activeSession ? 'Join Now' : 'Start Now'}
+                      </Button>
+                    )
+                  })()}
+                </Box>
               </Box>
             </CardContent>
           </Card>
@@ -569,7 +711,7 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
                   </Box>
                   
                   <Typography variant="body2" sx={{ mb: 2 }}>
-                    Continue from: {session.currentSection}
+                    Continue from: {session.lastPlace}
                   </Typography>
                   
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -591,6 +733,29 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
                     >
                       Join Session
                     </Button>
+                    {(() => {
+                      const activeSession = getActiveSessionForHavruta(session.havrutaId)
+                      return (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={activeSession ? <PlayArrow /> : <Bolt />}
+                          onClick={() => activeSession ? handleJoinActiveSession(session.havrutaId) : handleStartInstantSession(session.havrutaId)}
+                          sx={{ 
+                            flex: 1, 
+                            minWidth: 'fit-content',
+                            borderColor: activeSession ? theme.palette.success.main : theme.palette.warning.main,
+                            color: activeSession ? theme.palette.success.main : theme.palette.warning.main,
+                            '&:hover': {
+                              borderColor: activeSession ? theme.palette.success.dark : theme.palette.warning.dark,
+                              backgroundColor: activeSession ? theme.palette.success.light : theme.palette.warning.light,
+                            }
+                          }}
+                        >
+                          {activeSession ? 'Join Now' : 'Start Now'}
+                        </Button>
+                      )
+                    })()}
                     <Button
                       variant="outlined"
                       size="small"
@@ -690,7 +855,27 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
                     <Typography variant="body2" sx={{ mb: 2 }}>
                       {havruta.participants.length} participants
                     </Typography>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {(() => {
+                        const activeSession = getActiveSessionForHavruta(havruta.id)
+                        return (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={activeSession ? <PlayArrow /> : <Bolt />}
+                            onClick={() => activeSession ? handleJoinActiveSession(havruta.id) : handleStartInstantSession(havruta.id)}
+                            sx={{ 
+                              backgroundColor: activeSession ? theme.palette.success.main : theme.palette.warning.main,
+                              color: activeSession ? theme.palette.success.contrastText : theme.palette.warning.contrastText,
+                              '&:hover': {
+                                backgroundColor: activeSession ? theme.palette.success.dark : theme.palette.warning.dark,
+                              }
+                            }}
+                          >
+                            {activeSession ? 'Join Now' : 'Start Now'}
+                          </Button>
+                        )
+                      })()}
                       <Button
                         size="small"
                         startIcon={<Schedule />}
@@ -762,6 +947,13 @@ STUN: ${results.stunConnectivity.success ? '✓' : '✗'} ${results.stunConnecti
         }}
         havruta={selectedHavrutaForScheduling}
         onSuccess={handleSchedulingSuccess}
+      />
+
+      {/* Instant Session Notification */}
+      <InstantSessionNotification
+        invitation={instantSessionInvitation}
+        onClose={handleCloseInstantSessionNotification}
+        onJoin={handleInstantSessionJoin}
       />
 
       {/* Snackbar for notifications */}

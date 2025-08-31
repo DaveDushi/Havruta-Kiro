@@ -60,7 +60,6 @@ export class SyncService {
       await prisma.havruta.update({
         where: { id: havrutaId },
         data: { 
-          currentSection: section,
           lastStudiedAt: new Date()
         }
       })
@@ -96,7 +95,7 @@ export class SyncService {
       this.websocketService.broadcastToRoom(havrutaId, 'participant-joined', {
         userId,
         userName,
-        currentSection: havruta.currentSection,
+        currentSection: havruta.lastPlace,
         participantCount: room?.participants.size || 1,
         timestamp: new Date().toISOString()
       })
@@ -184,7 +183,6 @@ export class SyncService {
     await prisma.havruta.update({
       where: { id: havrutaId },
       data: { 
-        currentSection: winningNavigation.section,
         lastStudiedAt: new Date()
       }
     })

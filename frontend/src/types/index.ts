@@ -24,7 +24,13 @@ export interface Havruta {
   name: string
   bookId: string
   bookTitle: string
-  creatorId: string
+  ownerId: string
+  owner: {
+    id: string
+    name: string
+    email: string
+    profilePicture?: string
+  }
   participants: Array<{
     user: {
       id: string
@@ -33,7 +39,7 @@ export interface Havruta {
       profilePicture?: string
     }
   }>
-  currentSection: string
+  lastPlace: string
   isActive: boolean
   createdAt: Date
   lastStudiedAt: Date

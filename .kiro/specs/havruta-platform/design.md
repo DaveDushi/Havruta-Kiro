@@ -15,17 +15,19 @@ graph TB
     subgraph "Client Layer"
         WEB[Web Application]
         VIDEO[WebRTC Video Client]
+        SOCKET[Socket.io Client]
     end
     
     subgraph "Application Layer"
         API[REST API Server]
-        WS[WebSocket Server]
+        WS[WebSocket Server with Session Rooms]
         AUTH[Authentication Service]
+        ROOMS[Session Room Manager]
     end
     
     subgraph "Data Layer"
         DB[(PostgreSQL Database)]
-        CACHE[(Redis Cache)]
+        CACHE[(Redis Cache - Room State)]
     end
     
     subgraph "External Services"
@@ -34,13 +36,17 @@ graph TB
     end
     
     WEB --> API
-    WEB --> WS
-    VIDEO --> WEB
+    SOCKET --> WS
+    VIDEO --> SOCKET
+    WS --> ROOMS
+    ROOMS --> CACHE
     API --> AUTH
     API --> DB
-    WS --> CACHE
     AUTH --> OAUTH
     API --> SEFARIA
+    
+    note1[Session Rooms handle:<br/>- User join/leave<br/>- Navigation sync<br/>- WebRTC coordination<br/>- Auto-reconnection]
+    ROOMS -.-> note1
 ```
 
 ### Technology Stack
@@ -65,6 +71,69 @@ graph TB
 - Sefaria API for Jewish text content
 - OAuth providers (Google, Apple) for authentication
 
+## Session Lifecycle and Workflow
+
+### Havruta vs Session Distinction
+
+**Havruta (Ongoing Partnership):**
+- Persistent relationship between study partners (e.g., Isaac and Jacob)
+- Tracks the book being studied (e.g., Genesis)
+- Maintains the "last place" where they left off (e.g., Genesis 2:1)
+- Has an owner (creator) whose navigation determines progress saving
+- Contains multiple sessions over time
+
+**Session (Individual Study Instance):**
+- Temporary study period within a Havruta
+- Opens automatically to the Havruta's "last place"
+- Tracks coverage range for that specific session (e.g., Genesis 1:1 to Genesis 2:1)
+- Can be scheduled or instant
+- Ends when owner clicks "End Session" or auto-timeout occurs
+
+### WebSocket Session Room Workflow
+
+```mermaid
+sequenceDiagram
+    participant Owner as Isaac (Owner)
+    participant Participant as Jacob
+    participant WSServer as WebSocket Server
+    participant SessionRoom as Session Room
+    participant System
+
+    Owner->>System: Click "Start Instant Session"
+    System->>System: Create Session (ID: session-123)
+    Owner->>WSServer: Connect & Join Room "session-123"
+    WSServer->>SessionRoom: Add Isaac to room
+    
+    System->>Participant: Send real-time notification
+    Participant->>System: Click "Join Now"
+    Participant->>WSServer: Connect & Join Room "session-123"
+    WSServer->>SessionRoom: Add Jacob to room
+    WSServer->>Owner: Broadcast "Jacob joined"
+    
+    Owner->>WSServer: Navigate to Genesis 3:5
+    WSServer->>SessionRoom: Broadcast navigation event
+    WSServer->>Participant: Sync to Genesis 3:5
+    
+    Note over Owner, Participant: Optional WebRTC video coordination
+    Owner->>WSServer: WebRTC offer for Jacob
+    WSServer->>Participant: Forward WebRTC offer
+    Participant->>WSServer: WebRTC answer
+    WSServer->>Owner: Forward WebRTC answer
+    
+    Owner->>WSServer: Click "End Session"
+    WSServer->>SessionRoom: Broadcast session end
+    WSServer->>Participant: Notify session ended
+    WSServer->>SessionRoom: Close room "session-123"
+```
+
+### Instant Session Creation
+
+1. **Trigger:** User clicks "Start Instant Session" on Havruta card
+2. **Validation:** Check no active session exists for this Havruta
+3. **Creation:** Create session with type='instant', startingSection=havruta.lastPlace
+4. **Notification:** Send real-time notifications to all participants
+5. **Auto-open:** Creator automatically joins the session
+
 ## Components and Interfaces
 
 ### Frontend Components
@@ -81,9 +150,11 @@ graph TB
 - **Key Methods:**
   - `fetchUserHavrutot()`
   - `createNewHavruta()`
-  - `joinHavruta(sessionId: string)`
-  - `scheduleSession()`
+  - `startInstantSession(havrutaId: string)` // New instant session feature
+  - `joinActiveSession(sessionId: string)`
+  - `scheduleSession(havrutaId: string)`
   - `inviteParticipants(havrutaId: string, emails: string[])`
+  - `viewSessionHistory(havrutaId: string)`
 
 #### Participant Invitation Dialog Component
 - **Purpose:** Handle email-based participant invitations
@@ -98,7 +169,17 @@ graph TB
   - `initializeSession(sessionId: string)`
   - `syncTextNavigation(section: string)`
   - `initializeVideoCall()`
-  - `saveProgress()`
+  - `endSession()` // Owner-only action
+  - `trackSessionProgress(currentSection: string)`
+
+#### Session Management Component
+- **Purpose:** Handle session creation and lifecycle
+- **Key Methods:**
+  - `createInstantSession(havrutaId: string)`
+  - `createScheduledSession(havrutaId: string, schedule: SessionSchedule)`
+  - `joinSession(sessionId: string)`
+  - `endSession(sessionId: string)` // Owner privilege check
+  - `getSessionHistory(havrutaId: string)`
 
 #### Text Viewer Component
 - **Purpose:** Display and navigate Sefaria texts
@@ -123,9 +204,19 @@ interface AuthService {
 interface HavrutaService {
   createHavruta(creatorId: string, bookId: string, participants: string[]): Promise<Havruta>
   joinHavruta(userId: string, sessionId: string): Promise<void>
-  getHavrutaState(sessionId: string): Promise<HavrutaState>
-  updateProgress(sessionId: string, section: string): Promise<void>
+  getHavrutaState(havrutaId: string): Promise<HavrutaState>
+  updateLastPlace(havrutaId: string, section: string, ownerId: string): Promise<void>
   inviteParticipants(havrutaId: string, emails: string[]): Promise<InvitationResult>
+}
+
+interface SessionService {
+  createScheduledSession(havrutaId: string, scheduledTime: Date, recurrence?: RecurrencePattern): Promise<Session>
+  createInstantSession(havrutaId: string, creatorId: string): Promise<Session>
+  joinSession(sessionId: string, userId: string): Promise<void>
+  endSession(sessionId: string, ownerId: string, finalSection: string): Promise<Session>
+  getActiveSession(havrutaId: string): Promise<Session | null>
+  getSessionHistory(havrutaId: string): Promise<Session[]>
+  updateSessionProgress(sessionId: string, currentSection: string): Promise<void>
 }
 ```
 
@@ -198,12 +289,35 @@ interface SefariaIndex {
 }
 ```
 
-#### Real-time Synchronization Service
+#### WebSocket Session Room Service
 ```typescript
-interface SyncService {
-  broadcastNavigation(sessionId: string, section: string): void
-  syncParticipantJoin(sessionId: string, userId: string): void
-  syncParticipantLeave(sessionId: string, userId: string): void
+interface WebSocketRoomService {
+  // Room management
+  joinSessionRoom(sessionId: string, userId: string, socketId: string): Promise<void>
+  leaveSessionRoom(sessionId: string, userId: string, socketId: string): Promise<void>
+  getRoomParticipants(sessionId: string): Promise<string[]>
+  
+  // Real-time communication
+  broadcastToRoom(sessionId: string, event: string, data: any, excludeUserId?: string): void
+  broadcastNavigation(sessionId: string, section: string, navigatorId: string): void
+  broadcastParticipantJoined(sessionId: string, userId: string): void
+  broadcastParticipantLeft(sessionId: string, userId: string): void
+  broadcastSessionEnd(sessionId: string, finalSection: string): void
+  
+  // Connection management
+  handleReconnection(sessionId: string, userId: string, newSocketId: string): Promise<void>
+  cleanupEmptyRooms(): Promise<void>
+  
+  // WebRTC coordination
+  coordinateWebRTCOffer(sessionId: string, fromUserId: string, toUserId: string, offer: RTCSessionDescription): void
+  coordinateWebRTCAnswer(sessionId: string, fromUserId: string, toUserId: string, answer: RTCSessionDescription): void
+  coordinateICECandidate(sessionId: string, fromUserId: string, toUserId: string, candidate: RTCIceCandidate): void
+}
+
+interface SessionProgressService {
+  updateSessionProgress(sessionId: string, currentSection: string, isOwner: boolean): void
+  calculateCoverageRange(startSection: string, endSection: string): string
+  saveHavrutaProgress(havrutaId: string, lastPlace: string, ownerId: string): Promise<void>
 }
 ```
 
@@ -230,9 +344,9 @@ interface Havruta {
   name: string
   bookId: string
   bookTitle: string
-  creatorId: string
+  ownerId: string // Creator becomes the owner with special privileges
   participants: string[]
-  currentSection: string
+  lastPlace: string // Current location where they left off (e.g., "Genesis 2:1")
   isActive: boolean
   createdAt: Date
   lastStudiedAt: Date
@@ -245,12 +359,16 @@ interface Havruta {
 interface Session {
   id: string
   havrutaId: string
+  type: 'scheduled' | 'instant'
   startTime: Date
   endTime?: Date
   participantIds: string[]
-  sectionsStudied: string[]
+  startingSection: string // Where the session began (e.g., "Genesis 1:1")
+  endingSection?: string // Where the session ended (e.g., "Genesis 2:1")
+  coverageRange?: string // Full range covered (e.g., "Genesis 1:1 to Genesis 2:1")
   isRecurring: boolean
   recurrencePattern?: RecurrencePattern
+  status: 'scheduled' | 'active' | 'completed' | 'cancelled'
 }
 ```
 

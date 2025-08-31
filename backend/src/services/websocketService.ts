@@ -2,10 +2,7 @@ import { Server, Socket } from 'socket.io'
 import { User } from '@prisma/client'
 import { authService } from './authService'
 import { prisma } from '../utils/database'
-
-export interface AuthenticatedSocket extends Socket {
-  user?: User
-}
+import { WebSocketRoomService, AuthenticatedSocket } from './websocketRoomService'
 
 export interface HavrutaRoom {
   id: string
@@ -18,11 +15,20 @@ export class WebSocketService {
   private io: Server
   private rooms: Map<string, HavrutaRoom> = new Map()
   private syncService?: any // Will be set after SyncService is created
+  private roomService: WebSocketRoomService
 
   constructor(io: Server) {
     this.io = io
+    this.roomService = new WebSocketRoomService(io)
     this.setupMiddleware()
     this.setupConnectionHandlers()
+  }
+
+  /**
+   * Initialize the WebSocket service and room service
+   */
+  async initialize(): Promise<void> {
+    await this.roomService.initialize()
   }
 
   /**
@@ -75,12 +81,22 @@ export class WebSocketService {
     this.io.on('connection', (socket: AuthenticatedSocket) => {
       console.log(`User ${socket.user?.name} (${socket.user?.id}) connected: ${socket.id}`)
 
-      // Handle joining a Havruta room
+      // Handle joining a session room (replaces join-havruta)
+      socket.on('join-session', async (data: { sessionId: string }) => {
+        await this.handleJoinSession(socket, data.sessionId)
+      })
+
+      // Handle leaving a session room (replaces leave-havruta)
+      socket.on('leave-session', async (data: { sessionId: string }) => {
+        await this.handleLeaveSession(socket, data.sessionId)
+      })
+
+      // Handle joining a Havruta room (legacy support)
       socket.on('join-havruta', async (data: { havrutaId: string }) => {
         await this.handleJoinHavruta(socket, data.havrutaId)
       })
 
-      // Handle leaving a Havruta room
+      // Handle leaving a Havruta room (legacy support)
       socket.on('leave-havruta', async (data: { havrutaId: string }) => {
         await this.handleLeaveHavruta(socket, data.havrutaId)
       })
@@ -104,21 +120,21 @@ export class WebSocketService {
         await this.handleLeaveVideoCall(socket, data.sessionId, data.userId)
       })
 
-      socket.on('webrtc-offer', (data: { to: string; offer: RTCSessionDescriptionInit }) => {
-        this.handleWebRTCSignaling(socket, 'webrtc-offer', data)
+      socket.on('webrtc-offer', async (data: { to: string; offer: RTCSessionDescriptionInit }) => {
+        await this.handleWebRTCSignaling(socket, 'webrtc-offer', data)
       })
 
-      socket.on('webrtc-answer', (data: { to: string; answer: RTCSessionDescriptionInit }) => {
-        this.handleWebRTCSignaling(socket, 'webrtc-answer', data)
+      socket.on('webrtc-answer', async (data: { to: string; answer: RTCSessionDescriptionInit }) => {
+        await this.handleWebRTCSignaling(socket, 'webrtc-answer', data)
       })
 
-      socket.on('webrtc-ice-candidate', (data: { to: string; candidate: RTCIceCandidateInit }) => {
-        this.handleWebRTCSignaling(socket, 'webrtc-ice-candidate', data)
+      socket.on('webrtc-ice-candidate', async (data: { to: string; candidate: RTCIceCandidateInit }) => {
+        await this.handleWebRTCSignaling(socket, 'webrtc-ice-candidate', data)
       })
 
       // Handle disconnection
-      socket.on('disconnect', () => {
-        this.handleDisconnect(socket)
+      socket.on('disconnect', async () => {
+        await this.handleDisconnect(socket)
       })
 
       // Handle connection errors
@@ -129,7 +145,57 @@ export class WebSocketService {
   }
 
   /**
-   * Handle user joining a Havruta room
+   * Handle user joining a session room (new Redis-based implementation)
+   */
+  private async handleJoinSession(socket: AuthenticatedSocket, sessionId: string): Promise<void> {
+    try {
+      if (!socket.user) {
+        socket.emit('error', { message: 'User not authenticated' })
+        return
+      }
+
+      const result = await this.roomService.joinRoom(socket, sessionId)
+      
+      if (result.success) {
+        socket.emit('session-joined', {
+          sessionId,
+          roomState: result.roomState,
+          participants: result.participants
+        })
+      } else {
+        socket.emit('error', { message: result.error })
+      }
+    } catch (error) {
+      console.error('Error joining session:', error)
+      socket.emit('error', { message: 'Failed to join session' })
+    }
+  }
+
+  /**
+   * Handle user leaving a session room (new Redis-based implementation)
+   */
+  private async handleLeaveSession(socket: AuthenticatedSocket, sessionId: string): Promise<void> {
+    try {
+      if (!socket.user) return
+
+      const result = await this.roomService.leaveRoom(socket, sessionId)
+      
+      if (result.success) {
+        socket.emit('session-left', { 
+          sessionId,
+          participantCount: result.participantCount,
+          roomDeleted: result.roomDeleted
+        })
+      } else {
+        socket.emit('error', { message: result.error })
+      }
+    } catch (error) {
+      console.error('Error leaving session:', error)
+    }
+  }
+
+  /**
+   * Handle user joining a Havruta room (legacy implementation)
    */
   private async handleJoinHavruta(socket: AuthenticatedSocket, havrutaId: string): Promise<void> {
     try {
@@ -143,7 +209,7 @@ export class WebSocketService {
         where: {
           id: havrutaId,
           OR: [
-            { creatorId: socket.user.id },
+            { ownerId: socket.user.id },
             { participants: { some: { userId: socket.user.id } } }
           ]
         }
@@ -163,7 +229,7 @@ export class WebSocketService {
         room = {
           id: havrutaId,
           participants: new Map(),
-          currentSection: havruta.currentSection || undefined,
+          currentSection: havruta.lastPlace || undefined,
           lastActivity: new Date()
         }
         this.rooms.set(havrutaId, room)
@@ -259,7 +325,6 @@ export class WebSocketService {
         await prisma.havruta.update({
           where: { id: havrutaId },
           data: { 
-            currentSection: section,
             lastStudiedAt: new Date()
           }
         })
@@ -323,12 +388,27 @@ export class WebSocketService {
   /**
    * Handle socket disconnection
    */
-  private handleDisconnect(socket: AuthenticatedSocket): void {
+  private async handleDisconnect(socket: AuthenticatedSocket): Promise<void> {
     if (!socket.user) return
 
     console.log(`User ${socket.user.name} (${socket.user.id}) disconnected: ${socket.id}`)
 
-    // Remove from all rooms
+    // Handle disconnection in new room service
+    await this.roomService.handleDisconnect(socket)
+
+    // Clean up video calls for all sessions the user was in
+    // Get all rooms the user might have been in and notify video call participants
+    const rooms = socket.rooms
+    for (const roomId of rooms) {
+      if (roomId !== socket.id) { // Skip the socket's own room
+        const videoRoomId = `video-${roomId}`
+        socket.to(videoRoomId).emit('participant-left-call', {
+          participantId: socket.user.id
+        })
+      }
+    }
+
+    // Legacy room cleanup
     for (const [havrutaId, room] of this.rooms.entries()) {
       if (room.participants.has(socket.user.id)) {
         room.participants.delete(socket.user.id)
@@ -376,6 +456,27 @@ export class WebSocketService {
   }
 
   /**
+   * Broadcast message to specific user
+   */
+  public broadcastToUser(userId: string, event: string, data: any): void {
+    // Find the user's socket across all rooms
+    for (const room of this.rooms.values()) {
+      const userSocket = room.participants.get(userId)
+      if (userSocket) {
+        userSocket.emit(event, data)
+        return
+      }
+    }
+    
+    // If user is not in any room, try to find them by iterating through all connected sockets
+    this.io.sockets.sockets.forEach((socket: AuthenticatedSocket) => {
+      if (socket.user?.id === userId) {
+        socket.emit(event, data)
+      }
+    })
+  }
+
+  /**
    * Handle user joining a video call
    */
   private async handleJoinVideoCall(socket: AuthenticatedSocket, sessionId: string, userId: string): Promise<void> {
@@ -385,9 +486,10 @@ export class WebSocketService {
         return
       }
 
-      // Verify user has access to this session
-      const room = this.rooms.get(sessionId)
-      if (!room || !room.participants.has(userId)) {
+      // Verify user has access to this session using the room service
+      const participants = await this.roomService.getRoomParticipants(sessionId)
+      const isParticipant = participants.some(p => p.userId === userId)
+      if (!isParticipant) {
         socket.emit('error', { message: 'Not authorized for this session' })
         return
       }
@@ -444,32 +546,36 @@ export class WebSocketService {
   /**
    * Handle WebRTC signaling messages
    */
-  private handleWebRTCSignaling(socket: AuthenticatedSocket, event: string, data: any): void {
+  private async handleWebRTCSignaling(socket: AuthenticatedSocket, event: string, data: any): Promise<void> {
     try {
       if (!socket.user) return
 
       // Find the target socket by user ID
       const targetUserId = data.to
-      const room = Array.from(this.rooms.values()).find(r => 
-        r.participants.has(socket.user!.id) && r.participants.has(targetUserId)
-      )
+      
+      // Find a session where both users are participants
+      let targetSocket: AuthenticatedSocket | null = null
+      
+      // Get all connected sockets and find the target user
+      this.io.sockets.sockets.forEach((s: AuthenticatedSocket) => {
+        if (s.user?.id === targetUserId) {
+          targetSocket = s
+        }
+      })
 
-      if (!room) {
-        socket.emit('error', { message: 'Target participant not found in session' })
+      if (!targetSocket) {
+        socket.emit('error', { message: 'Target participant not found or not connected' })
         return
       }
 
-      const targetSocket = room.participants.get(targetUserId)
-      if (targetSocket) {
-        // Forward the signaling message to the target participant
-        const forwardData = {
-          from: socket.user.id,
-          ...data
-        }
-        delete forwardData.to // Remove the 'to' field as it's not needed by the recipient
-
-        targetSocket.emit(event, forwardData)
+      // Forward the signaling message to the target participant
+      const forwardData = {
+        from: socket.user.id,
+        ...data
       }
+      delete forwardData.to // Remove the 'to' field as it's not needed by the recipient
+
+      targetSocket.emit(event, forwardData)
     } catch (error) {
       console.error('Error handling WebRTC signaling:', error)
     }
@@ -481,11 +587,64 @@ export class WebSocketService {
   public cleanupInactiveRooms(maxInactiveMinutes: number = 60): void {
     const cutoff = new Date(Date.now() - maxInactiveMinutes * 60 * 1000)
     
+    // Clean up legacy rooms
     for (const [havrutaId, room] of this.rooms.entries()) {
       if (room.lastActivity < cutoff && room.participants.size === 0) {
         this.rooms.delete(havrutaId)
         console.log(`Cleaned up inactive room: ${havrutaId}`)
       }
     }
+
+    // Clean up Redis-based rooms
+    this.roomService.cleanupInactiveRooms()
+  }
+
+  /**
+   * Get room service for direct access
+   */
+  public getRoomService(): WebSocketRoomService {
+    return this.roomService
+  }
+
+  /**
+   * Get session room state
+   */
+  public async getSessionRoomState(sessionId: string) {
+    return await this.roomService.getRoomState(sessionId)
+  }
+
+  /**
+   * Get session room participants
+   */
+  public async getSessionRoomParticipants(sessionId: string) {
+    return await this.roomService.getRoomParticipants(sessionId)
+  }
+
+  /**
+   * Update session room section
+   */
+  public async updateSessionRoomSection(sessionId: string, section: string, userId: string) {
+    return await this.roomService.updateRoomSection(sessionId, section, userId)
+  }
+
+  /**
+   * Broadcast to session room
+   */
+  public broadcastToSessionRoom(sessionId: string, event: string, data: any): void {
+    this.roomService.broadcastToRoom(sessionId, event, data)
+  }
+
+  /**
+   * Get room statistics
+   */
+  public async getRoomStatistics() {
+    return await this.roomService.getRoomStatistics()
+  }
+
+  /**
+   * Shutdown the WebSocket service
+   */
+  public async shutdown(): Promise<void> {
+    await this.roomService.shutdown()
   }
 }

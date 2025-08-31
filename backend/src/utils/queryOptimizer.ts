@@ -252,7 +252,7 @@ export class OptimizedPrismaClient extends PrismaClient {
       },
       {
         table: 'Havruta',
-        columns: ['creatorId', 'isActive'],
+        columns: ['ownerId', 'isActive'],
         reason: 'Common filter combination in dashboard queries',
         estimatedImprovement: 'Medium - dashboard performance'
       },

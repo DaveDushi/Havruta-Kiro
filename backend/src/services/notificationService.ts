@@ -3,11 +3,17 @@ import { prisma } from '../utils/database'
 import cron from 'node-cron'
 
 export interface NotificationData {
-  type: 'session_reminder' | 'session_starting' | 'session_cancelled'
+  type: 'session_reminder' | 'session_starting' | 'session_cancelled' | 'instant_session_invitation'
   sessionId: string
   userId: string
   message: string
   scheduledFor: Date
+  metadata?: {
+    havrutaId?: string
+    havrutaName?: string
+    creatorName?: string
+    joinUrl?: string
+  }
 }
 
 export interface SessionNotification {
@@ -23,6 +29,87 @@ export interface SessionNotification {
 
 export class NotificationService {
   private scheduledJobs: Map<string, cron.ScheduledTask> = new Map()
+  private websocketService?: any // Will be set after WebSocketService is created
+
+  /**
+   * Set the WebSocket service (called after WebSocketService is instantiated)
+   */
+  setWebSocketService(websocketService: any): void {
+    this.websocketService = websocketService
+  }
+
+  /**
+   * Send instant session invitation notifications to all Havruta participants
+   */
+  async sendInstantSessionInvitations(sessionId: string, excludeUserId: string): Promise<void> {
+    try {
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId },
+        include: {
+          havruta: {
+            include: {
+              owner: true,
+              participants: {
+                include: { user: true }
+              }
+            }
+          }
+        }
+      })
+
+      if (!session) {
+        throw new Error('Session not found')
+      }
+
+      // Get all participants except the creator
+      const participantsToNotify = session.havruta.participants
+        .filter(p => p.userId !== excludeUserId)
+        .map(p => p.user)
+
+      // Send real-time notifications via WebSocket
+      for (const participant of participantsToNotify) {
+        const notificationData: NotificationData = {
+          type: 'instant_session_invitation',
+          sessionId: session.id,
+          userId: participant.id,
+          message: `${session.havruta.owner.name} started an instant session for "${session.havruta.name}"`,
+          scheduledFor: new Date(),
+          metadata: {
+            havrutaId: session.havrutaId,
+            havrutaName: session.havruta.name,
+            creatorName: session.havruta.owner.name,
+            joinUrl: `/sessions/${session.id}/join`
+          }
+        }
+
+        // Send real-time notification via WebSocket
+        if (this.websocketService) {
+          try {
+            this.websocketService.broadcastToUser(participant.id, 'instant-session-invitation', {
+              sessionId: session.id,
+              havrutaId: session.havrutaId,
+              havrutaName: session.havruta.name,
+              creatorName: session.havruta.owner.name,
+              message: notificationData.message,
+              joinUrl: notificationData.metadata.joinUrl,
+              timestamp: new Date().toISOString()
+            })
+          } catch (wsError) {
+            console.error(`WebSocket notification failed for user ${participant.id}:`, wsError)
+            // Continue with other notifications even if WebSocket fails
+          }
+        }
+
+        // Also send immediate notification (could be email, push, etc.)
+        await this.sendNotification(notificationData)
+      }
+
+      console.log(`Sent instant session invitations for session ${sessionId} to ${participantsToNotify.length} participants`)
+    } catch (error) {
+      console.error('Error sending instant session invitations:', error)
+      throw error
+    }
+  }
 
   /**
    * Schedule notifications for a session

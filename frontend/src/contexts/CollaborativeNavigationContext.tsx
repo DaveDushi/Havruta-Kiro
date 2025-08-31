@@ -133,15 +133,15 @@ export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationPr
     dispatch({ type: 'SET_PARTICIPANTS', payload: positions })
   }, [])
 
-  const handleSessionJoined = useCallback((data: { havrutaId: string }) => {
-    dispatch({ type: 'SET_SESSION_ID', payload: data.havrutaId })
+  const handleSessionJoined = useCallback((data: { sessionId: string, roomState?: any, participants?: any[] }) => {
+    dispatch({ type: 'SET_SESSION_ID', payload: data.sessionId })
     dispatch({ type: 'SET_CONNECTED', payload: true })
-    console.log('Successfully joined havruta session:', data.havrutaId)
+    console.log('Successfully joined session:', data.sessionId)
   }, [])
 
-  const handleSessionLeft = useCallback((data: { havrutaId: string }) => {
+  const handleSessionLeft = useCallback((data: { sessionId: string, participantCount: number, roomDeleted: boolean }) => {
     dispatch({ type: 'RESET_STATE' })
-    console.log('Left havruta session:', data.havrutaId)
+    console.log('Left session:', data.sessionId)
   }, [])
 
   const handleSessionError = useCallback((data: { message: string }) => {
@@ -151,10 +151,43 @@ export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationPr
 
   // Set up socket event listeners
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      console.log('⏳ No user available for socket connection')
+      return
+    }
 
-    // Connect to socket service
-    socketService.connect(user).catch(console.error)
+    let isMounted = true
+    let connectionAttempted = false
+
+    const connectSocket = async () => {
+      if (connectionAttempted || socketService.isConnected()) {
+        console.log('🔄 Socket already connected or connection attempted')
+        return
+      }
+      
+      connectionAttempted = true
+      try {
+        console.log('🚀 Attempting to connect socket for user:', user.name)
+        await socketService.connect(user)
+        if (isMounted) {
+          console.log('✅ Socket connected successfully for user:', user.name)
+        }
+      } catch (error) {
+        console.error('❌ Failed to connect socket:', error)
+        if (isMounted) {
+          // Reset connection attempt flag on error so it can be retried
+          connectionAttempted = false
+        }
+      }
+    }
+
+    // Connect to socket service only if not already connected
+    connectSocket()
+
+    // Cleanup function
+    return () => {
+      isMounted = false
+    }
 
     // Register event handlers
     socketService.on('navigation:update', handleNavigationUpdate)
@@ -163,8 +196,8 @@ export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationPr
     socketService.on('participant:joined', handleParticipantJoined)
     socketService.on('participant:left', handleParticipantLeft)
     socketService.on('participant:positions', handleParticipantPositions)
-    socketService.on('havruta-joined', handleSessionJoined)
-    socketService.on('havruta-left', handleSessionLeft)
+    socketService.on('session-joined', handleSessionJoined)
+    socketService.on('session-left', handleSessionLeft)
     socketService.on('error', handleSessionError)
 
     return () => {
@@ -175,22 +208,11 @@ export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationPr
       socketService.off('participant:joined', handleParticipantJoined)
       socketService.off('participant:left', handleParticipantLeft)
       socketService.off('participant:positions', handleParticipantPositions)
-      socketService.off('havruta-joined', handleSessionJoined)
-      socketService.off('havruta-left', handleSessionLeft)
+      socketService.off('session-joined', handleSessionJoined)
+      socketService.off('session-left', handleSessionLeft)
       socketService.off('error', handleSessionError)
     }
-  }, [
-    user,
-    handleNavigationUpdate,
-    handleNavigationConflict,
-    handleNavigationSync,
-    handleParticipantJoined,
-    handleParticipantLeft,
-    handleParticipantPositions,
-    handleSessionJoined,
-    handleSessionLeft,
-    handleSessionError
-  ])
+  }, [user?.id]) // Only depend on user ID to prevent reconnections
 
   // Context methods
   const connectToSession = useCallback(async (sessionId: string) => {
@@ -202,6 +224,34 @@ export const CollaborativeNavigationProvider: React.FC<CollaborativeNavigationPr
     }
 
     try {
+      console.log('🔐 Validating session access before connecting:', sessionId)
+      
+      // First validate session access via HTTP API
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        throw new Error('No authentication token available')
+      }
+      
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Access denied: You do not have permission to access this session')
+        } else if (response.status === 401) {
+          throw new Error('Authentication required')
+        } else if (response.status === 404) {
+          throw new Error('Session not found')
+        } else {
+          throw new Error('Failed to validate session access')
+        }
+      }
+      
+      console.log('✅ Session access validated, connecting to socket')
+      
       // Ensure socket is connected first
       if (!socketService.isConnected()) {
         console.log('🔌 Socket not connected, connecting first...')

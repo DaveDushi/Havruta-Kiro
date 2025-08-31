@@ -101,11 +101,19 @@ class AuthService {
       const { token } = response.data
       this.setTokens(token, this.refreshToken)
 
+      // Notify socket service about token refresh
+      this.notifyTokenRefresh()
+
       return token
     } catch (error) {
       console.error('Token refresh failed:', error)
       throw new Error('Token refresh failed')
     }
+  }
+
+  private notifyTokenRefresh(): void {
+    // Dispatch custom event for token refresh
+    window.dispatchEvent(new CustomEvent('auth:token-refreshed'))
   }
 
   async getCurrentUser(): Promise<User | null> {

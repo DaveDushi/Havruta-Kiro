@@ -53,8 +53,8 @@ describe('InvitationService', () => {
       id: 'havruta-1',
       name: 'Test Havruta',
       bookTitle: 'Genesis',
-      creatorId: 'user-1',
-      creator: {
+      ownerId: 'user-1',
+      owner: {
         id: 'user-1',
         name: 'John Doe',
         email: 'john@example.com',

@@ -10,14 +10,14 @@ export interface Havruta extends PrismaHavruta {
   createdAt: Date;
   lastStudiedAt: Date | null;
   totalSessions: number;
-  creatorId: string;
+  ownerId: string;
 }
 
 export interface CreateHavrutaData {
   name: string;
   bookId: string;
   bookTitle: string;
-  creatorId: string;
+  ownerId: string;
   currentSection?: string;
 }
 

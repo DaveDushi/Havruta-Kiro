@@ -22,7 +22,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const havrutaData = {
       ...req.body,
-      creatorId: userId
+      ownerId: userId
     }
 
     const havruta = await havrutaService.createHavruta(havrutaData)
@@ -242,17 +242,17 @@ router.put('/:id/progress', async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id
     const havrutaId = req.params.id
-    const { currentSection } = req.body
+    const { lastPlace } = req.body
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' })
     }
 
-    if (!currentSection || typeof currentSection !== 'string') {
-      return res.status(400).json({ error: 'Current section is required' })
+    if (!lastPlace || typeof lastPlace !== 'string') {
+      return res.status(400).json({ error: 'Last place is required' })
     }
 
-    await havrutaService.updateProgress(havrutaId, currentSection, userId)
+    await havrutaService.updateProgress(havrutaId, lastPlace, userId)
     res.status(204).send()
   } catch (error) {
     console.error('Error updating Havruta progress:', error)

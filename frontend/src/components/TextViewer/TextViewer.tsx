@@ -168,7 +168,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
     if (isCollaborative && !fromSync && !isNavigatingFromSync) {
       collaborative.broadcastNavigation(newRef)
     }
-  }, [loadText, onNavigationChange, isCollaborative, isNavigatingFromSync])
+  }, [onNavigationChange, isCollaborative, isNavigatingFromSync, collaborative]) // Remove loadText from dependencies
 
   // Handle search
   const handleSearch = useCallback(async (query: string) => {
@@ -237,7 +237,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
       handleNavigation(event.newRef, true)
       setIsNavigatingFromSync(false)
     }
-  }, [handleNavigation, userId])
+  }, [userId]) // Remove handleNavigation from dependencies
 
   // Handle conflict resolution
   const handleConflictResolution = useCallback((chosenRef: string) => {
@@ -245,14 +245,14 @@ const TextViewer: React.FC<TextViewerProps> = ({
     setIsNavigatingFromSync(true)
     handleNavigation(chosenRef, true)
     setIsNavigatingFromSync(false)
-  }, [collaborative, handleNavigation])
+  }, [collaborative]) // Remove handleNavigation from dependencies
 
   // Handle participant navigation (when clicking on participant indicator)
   const handleParticipantNavigation = useCallback((ref: string) => {
     setIsNavigatingFromSync(true)
     handleNavigation(ref, true)
     setIsNavigatingFromSync(false)
-  }, [handleNavigation])
+  }, []) // Remove handleNavigation from dependencies
 
   // Video call handlers
   const initializeVideoCall = useCallback(async () => {
@@ -268,7 +268,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
     // Wait for socket connection
     if (!socketService.isConnected()) {
       console.log('⏳ Waiting for socket connection before initializing video call...')
-      setTimeout(() => initializeVideoCall(), 1000)
+      setVideoCallError('Socket not connected. Please try again.')
       return
     }
 
@@ -347,14 +347,14 @@ const TextViewer: React.FC<TextViewerProps> = ({
       setCurrentRef(firstRef)
       loadText(firstRef)
     }
-  }, [initialRef, bookTitle, loadText])
+  }, [initialRef, bookTitle]) // Remove loadText from dependencies to prevent infinite loop
 
   // Handle external search query changes
   useEffect(() => {
     if (externalSearchQuery !== undefined) {
       handleSearch(externalSearchQuery)
     }
-  }, [externalSearchQuery, handleSearch])
+  }, [externalSearchQuery]) // Remove handleSearch from dependencies
 
   // Connect to collaborative session
   useEffect(() => {
@@ -363,10 +363,22 @@ const TextViewer: React.FC<TextViewerProps> = ({
       
       const connectToSession = async () => {
         try {
+          console.log('🔐 Connecting to collaborative session with validation:', sessionId)
           await collaborative.connectToSession(sessionId)
           console.log('✅ Successfully connected to collaborative session')
         } catch (error) {
           console.error('❌ Failed to connect to collaborative session:', error)
+          const errorMessage = error instanceof Error ? error.message : 'Failed to connect to session'
+          
+          // Handle authentication errors specifically
+          if (errorMessage.includes('Authentication required') || errorMessage.includes('Access denied')) {
+            console.log('🚫 Authentication/authorization error in TextViewer, stopping collaborative features')
+            onError?.(errorMessage)
+            return
+          }
+          
+          // Handle other errors
+          onError?.(errorMessage)
         }
       }
       
@@ -385,7 +397,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
         hasAll: !!(isCollaborative && sessionId && userId)
       })
     }
-  }, [isCollaborative, sessionId, userId])
+  }, [isCollaborative, sessionId, userId, collaborative]) // Add collaborative to dependencies
 
   // Set up collaborative navigation listener
   useEffect(() => {
@@ -396,7 +408,7 @@ const TextViewer: React.FC<TextViewerProps> = ({
         collaborative.offNavigationUpdate(handleCollaborativeNavigation)
       }
     }
-  }, [isCollaborative, handleCollaborativeNavigation])
+  }, [isCollaborative, collaborative, handleCollaborativeNavigation])
 
   if (loading && !currentText) {
     return (

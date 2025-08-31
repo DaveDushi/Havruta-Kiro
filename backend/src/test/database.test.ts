@@ -77,7 +77,7 @@ describe('Database Models', () => {
     expect(() => {
       prisma.havruta.findMany({
         include: {
-          creator: true,
+          owner: true,
           participants: true,
           sessions: true,
           progress: true,

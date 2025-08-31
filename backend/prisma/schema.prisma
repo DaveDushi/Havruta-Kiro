@@ -21,7 +21,7 @@ model User {
   lastActiveAt    DateTime  @default(now())
   
   // Relations
-  createdHavrutot Havruta[] @relation("HavrutaCreator")
+  ownedHavrutot   Havruta[] @relation("HavrutaOwner")
   participantIn   HavrutaParticipant[]
   progress        Progress[]
   sessions        SessionParticipant[]
@@ -35,15 +35,15 @@ model Havruta {
   name           String
   bookId         String
   bookTitle      String
-  currentSection String    @default("")
+  lastPlace      String    @default("") // Current location where they left off (e.g., "Genesis 2:1")
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   lastStudiedAt  DateTime?
   totalSessions  Int       @default(0)
   
   // Relations
-  creatorId      String
-  creator        User      @relation("HavrutaCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  ownerId        String    // Creator becomes the owner with special privileges
+  owner          User      @relation("HavrutaOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   participants   HavrutaParticipant[]
   sessions       Session[]
   progress       Progress[]
@@ -67,12 +67,17 @@ model HavrutaParticipant {
 }
 
 model Session {
-  id              String     @id @default(cuid())
-  startTime       DateTime
-  endTime         DateTime?
-  sectionsStudied String[]   @default([])
-  isRecurring     Boolean    @default(false)
-  createdAt       DateTime   @default(now())
+  id               String     @id @default(cuid())
+  type             String     @default("scheduled") // 'scheduled' | 'instant'
+  status           String     @default("scheduled") // 'scheduled' | 'active' | 'completed' | 'cancelled'
+  startTime        DateTime
+  endTime          DateTime?
+  startingSection  String     @default("") // Where the session began (e.g., "Genesis 1:1")
+  endingSection    String?    // Where the session ended (e.g., "Genesis 2:1")
+  coverageRange    String?    // Full range covered (e.g., "Genesis 1:1 to Genesis 2:1")
+  sectionsStudied  String[]   @default([]) // Deprecated - use startingSection/endingSection instead
+  isRecurring      Boolean    @default(false)
+  createdAt        DateTime   @default(now())
   
   // Relations
   havrutaId            String
@@ -81,6 +86,10 @@ model Session {
   recurrencePatternId  String?
   recurrencePattern    RecurrencePattern?    @relation(fields: [recurrencePatternId], references: [id], onDelete: SetNull)
   
+  // Indexes for active session queries
+  @@index([havrutaId, status])
+  @@index([status])
+  @@index([type, status])
   @@map("sessions")
 }
 

@@ -8,14 +8,14 @@ export const createHavrutaSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be less than 100 characters'),
   bookId: z.string().min(1, 'Book ID is required'),
   bookTitle: z.string().min(1, 'Book title is required'),
-  creatorId: z.string().min(1, 'Creator ID is required'),
-  currentSection: z.string().optional().default(''),
+  ownerId: z.string().min(1, 'Owner ID is required'),
+  lastPlace: z.string().optional().default(''),
   participantIds: z.array(z.string()).optional().default([])
 })
 
 export const updateHavrutaSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  currentSection: z.string().optional(),
+  lastPlace: z.string().optional(),
   isActive: z.boolean().optional(),
   lastStudiedAt: z.date().optional(),
   totalSessions: z.number().int().min(0).optional()
@@ -39,11 +39,11 @@ export type JoinHavrutaData = z.infer<typeof joinHavrutaSchema>
 export type GetHavrutotQuery = z.infer<typeof getHavrutotQuerySchema>
 
 export interface HavrutaWithRelations extends Havruta {
-  creator: {
+  owner: {
     id: string
     name: string
     email: string
-    profilePicture?: string
+    profilePicture?: string | null
   }
   participants: Array<{
     id: string
@@ -52,7 +52,7 @@ export interface HavrutaWithRelations extends Havruta {
       id: string
       name: string
       email: string
-      profilePicture?: string
+      profilePicture?: string | null
     }
   }>
   _count?: {
@@ -66,7 +66,7 @@ export interface HavrutaState {
   name: string
   bookId: string
   bookTitle: string
-  currentSection: string
+  lastPlace: string
   isActive: boolean
   participantCount: number
   activeParticipants: string[]
@@ -84,12 +84,12 @@ export class HavrutaService {
       const validatedData = createHavrutaSchema.parse(data)
       const { participantIds, ...havrutaData } = validatedData
 
-      // Verify creator exists
-      const creator = await prisma.user.findUnique({
-        where: { id: validatedData.creatorId }
+      // Verify owner exists
+      const owner = await prisma.user.findUnique({
+        where: { id: validatedData.ownerId }
       })
-      if (!creator) {
-        throw new Error('Creator not found')
+      if (!owner) {
+        throw new Error('Owner not found')
       }
 
       // Verify all participants exist
@@ -102,9 +102,9 @@ export class HavrutaService {
         }
       }
 
-      // Validate participant limits (max 10 participants including creator)
+      // Validate participant limits (max 10 participants including owner)
       if (participantIds.length > 9) {
-        throw new Error('Maximum 10 participants allowed (including creator)')
+        throw new Error('Maximum 10 participants allowed (including owner)')
       }
 
       // Create Havruta with participants in a transaction
@@ -114,8 +114,8 @@ export class HavrutaService {
           data: havrutaData
         })
 
-        // Add participants (excluding creator to avoid duplication)
-        const uniqueParticipantIds = participantIds.filter(id => id !== validatedData.creatorId)
+        // Add participants (excluding owner to avoid duplication)
+        const uniqueParticipantIds = participantIds.filter(id => id !== validatedData.ownerId)
         if (uniqueParticipantIds.length > 0) {
           await tx.havrutaParticipant.createMany({
             data: uniqueParticipantIds.map(userId => ({
@@ -125,10 +125,10 @@ export class HavrutaService {
           })
         }
 
-        // Add creator as participant
+        // Add owner as participant
         await tx.havrutaParticipant.create({
           data: {
-            userId: validatedData.creatorId,
+            userId: validatedData.ownerId,
             havrutaId: newHavruta.id
           }
         })
@@ -155,7 +155,7 @@ export class HavrutaService {
       const havruta = await prisma.havruta.findUnique({
         where: { id: havrutaId },
         include: {
-          creator: {
+          owner: {
             select: {
               id: true,
               name: true,
@@ -224,7 +224,7 @@ export class HavrutaService {
         throw new Error('Cannot join inactive Havruta')
       }
 
-      // Check participant limit (max 10 including creator)
+      // Check participant limit (max 10 including owner)
       if (havruta._count.participants >= 10) {
         throw new Error('Havruta is full (maximum 10 participants)')
       }
@@ -286,8 +286,8 @@ export class HavrutaService {
         throw new Error('User is not a participant in this Havruta')
       }
 
-      // If user is the creator, transfer ownership or deactivate
-      if (havruta.creatorId === userId) {
+      // If user is the owner, transfer ownership or deactivate
+      if (havruta.ownerId === userId) {
         // Find another participant to transfer ownership to
         const otherParticipant = await prisma.havrutaParticipant.findFirst({
           where: {
@@ -301,7 +301,7 @@ export class HavrutaService {
           // Transfer ownership to another participant
           await prisma.havruta.update({
             where: { id: havrutaId },
-            data: { creatorId: otherParticipant.userId }
+            data: { ownerId: otherParticipant.userId }
           })
         } else {
           // No other participants, deactivate the Havruta
@@ -341,8 +341,8 @@ export class HavrutaService {
       if (!havruta) {
         throw new Error('Havruta not found')
       }
-      if (havruta.creatorId !== userId) {
-        throw new Error('Only the creator can update this Havruta')
+      if (havruta.ownerId !== userId) {
+        throw new Error('Only the owner can update this Havruta')
       }
 
       // Update Havruta
@@ -374,8 +374,8 @@ export class HavrutaService {
       if (!havruta) {
         throw new Error('Havruta not found')
       }
-      if (havruta.creatorId !== userId) {
-        throw new Error('Only the creator can delete this Havruta')
+      if (havruta.ownerId !== userId) {
+        throw new Error('Only the owner can delete this Havruta')
       }
 
       // Delete Havruta (cascading deletes will handle related records)
@@ -391,7 +391,7 @@ export class HavrutaService {
   /**
    * Get Havrutot for a user (created or participating)
    */
-  async getUserHavrutot(userId: string, query: GetHavrutotQuery = {}): Promise<{
+  async getUserHavrutot(userId: string, query: Partial<GetHavrutotQuery> = {}): Promise<{
     havrutot: HavrutaWithRelations[]
     pagination: {
       page: number
@@ -409,10 +409,10 @@ export class HavrutaService {
       // Build where clause
       const where = {
         AND: [
-          // User is either creator or participant
+          // User is either owner or participant
           {
             OR: [
-              { creatorId: userId },
+              { ownerId: userId },
               { participants: { some: { userId } } }
             ]
           },
@@ -438,7 +438,7 @@ export class HavrutaService {
         take: limit,
         orderBy: { lastStudiedAt: 'desc' },
         include: {
-          creator: {
+          owner: {
             select: {
               id: true,
               name: true,
@@ -516,7 +516,7 @@ export class HavrutaService {
         name: havruta.name,
         bookId: havruta.bookId,
         bookTitle: havruta.bookTitle,
-        currentSection: havruta.currentSection,
+        lastPlace: havruta.lastPlace,
         isActive: havruta.isActive,
         participantCount: havruta._count.participants,
         activeParticipants: havruta.participants.map(p => p.userId),
@@ -530,9 +530,9 @@ export class HavrutaService {
   }
 
   /**
-   * Update Havruta progress (current section and last studied time)
+   * Update Havruta progress (last place and last studied time)
    */
-  async updateProgress(havrutaId: string, currentSection: string, userId: string): Promise<void> {
+  async updateProgress(havrutaId: string, lastPlace: string, userId: string): Promise<void> {
     try {
       // Verify user is a participant
       const participant = await prisma.havrutaParticipant.findUnique({
@@ -551,7 +551,7 @@ export class HavrutaService {
       await prisma.havruta.update({
         where: { id: havrutaId },
         data: {
-          currentSection,
+          lastPlace,
           lastStudiedAt: new Date()
         }
       })
@@ -590,14 +590,14 @@ export class HavrutaService {
         where: {
           isActive: true,
           OR: [
-            { creatorId: userId },
+            { ownerId: userId },
             { participants: { some: { userId } } }
           ]
         },
         orderBy: { lastStudiedAt: 'desc' },
         take: 5, // Limit to 5 most recent active Havrutot
         include: {
-          creator: {
+          owner: {
             select: {
               id: true,
               name: true,

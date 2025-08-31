@@ -20,7 +20,7 @@ describe('HavrutaService', () => {
     })
     await prisma.havruta.deleteMany({
       where: {
-        creator: {
+        owner: {
           email: {
             startsWith: 'test-havruta-'
           }
@@ -78,7 +78,7 @@ describe('HavrutaService', () => {
     })
     await prisma.havruta.deleteMany({
       where: {
-        creator: {
+        owner: {
           email: {
             startsWith: 'test-havruta-'
           }

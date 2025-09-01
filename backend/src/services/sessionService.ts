@@ -313,7 +313,7 @@ export class SessionService {
   }
 
   /**
-   * Leave a session
+   * Leave a session (Zoom-like behavior)
    */
   async leaveSession(userId: string, sessionId: string): Promise<void> {
     try {
@@ -321,7 +321,15 @@ export class SessionService {
       const session = await prisma.session.findUnique({
         where: { id: sessionId },
         include: {
-          havruta: true
+          havruta: true,
+          participants: {
+            where: { leftAt: null }, // Only active participants
+            include: {
+              user: {
+                select: { id: true, name: true }
+              }
+            }
+          }
         }
       })
       if (!session) {
@@ -344,38 +352,44 @@ export class SessionService {
         throw new Error('User has already left this session')
       }
 
-      // For instant sessions, if the owner is leaving, end the session instead
-      if (session.type === 'instant' && session.havruta.ownerId === userId) {
-        // End the instant session automatically
-        const endTime = new Date()
-        await prisma.$transaction(async (tx) => {
-          // End the session
+      const leaveTime = new Date()
+      const isOwner = session.havruta.ownerId === userId
+      const activeParticipants = session.participants.filter(p => p.userId !== userId)
+
+      await prisma.$transaction(async (tx) => {
+        // Mark user as left
+        await tx.sessionParticipant.update({
+          where: { id: participant.id },
+          data: { leftAt: leaveTime }
+        })
+
+        // If owner is leaving and there are other participants, transfer ownership
+        if (isOwner && activeParticipants.length > 0) {
+          // Transfer ownership to the next participant (first one who joined)
+          const newOwnerId = activeParticipants[0].userId
+          await tx.havruta.update({
+            where: { id: session.havrutaId },
+            data: { ownerId: newOwnerId }
+          })
+          
+          console.log(`Ownership transferred from ${userId} to ${newOwnerId} for Havruta ${session.havrutaId}`)
+        }
+
+        // If no one is left in the session, auto-close it
+        if (activeParticipants.length === 0) {
           await tx.session.update({
             where: { id: sessionId },
             data: { 
               status: 'completed',
-              endTime,
+              endTime: leaveTime,
               endingSection: session.startingSection || `${session.havruta.bookTitle} 1:1`,
-              coverageRange: `Instant session ended by owner`
+              coverageRange: 'Session auto-ended - all participants left'
             }
           })
-
-          // Mark all active participants as left
-          await tx.sessionParticipant.updateMany({
-            where: {
-              sessionId,
-              leftAt: null
-            },
-            data: { leftAt: endTime }
-          })
-        })
-      } else {
-        // Regular leave behavior for scheduled sessions or non-owners
-        await prisma.sessionParticipant.update({
-          where: { id: participant.id },
-          data: { leftAt: new Date() }
-        })
-      }
+          
+          console.log(`Session ${sessionId} auto-closed - no participants remaining`)
+        }
+      })
     } catch (error) {
       console.error('Error leaving session:', error)
       throw error instanceof Error ? error : new Error('Failed to leave session')
@@ -476,7 +490,7 @@ export class SessionService {
   }
 
   /**
-   * End a session with coverage range tracking
+   * End a session with coverage range tracking (Zoom-like behavior)
    */
   async endSession(sessionId: string, userId: string, data: EndSessionData): Promise<void> {
     try {
@@ -498,9 +512,9 @@ export class SessionService {
         throw new Error('Session has already ended')
       }
 
-      // Check if user is the Havruta owner (only owner can end sessions)
+      // Check if user is the current Havruta owner (ownership may have been transferred)
       if (session.havruta.ownerId !== userId) {
-        throw new Error('Only the Havruta owner can end sessions')
+        throw new Error('Only the current session owner can end sessions for everyone')
       }
 
       const endTime = new Date()
@@ -951,6 +965,26 @@ export class SessionService {
       return !!participant
     } catch (error) {
       console.error('Error checking session access:', error)
+      return false
+    }
+  }
+
+  /**
+   * Check if user is the current session owner (can end session for everyone)
+   */
+  async isSessionOwner(sessionId: string, userId: string): Promise<boolean> {
+    try {
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId },
+        include: {
+          havruta: {
+            select: { ownerId: true }
+          }
+        }
+      })
+      return session?.havruta.ownerId === userId
+    } catch (error) {
+      console.error('Error checking session ownership:', error)
       return false
     }
   }

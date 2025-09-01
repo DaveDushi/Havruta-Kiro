@@ -7,7 +7,7 @@ export class RedisClient {
 
   constructor() {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
-    
+
     this.client = createClient({
       url: redisUrl,
       socket: {
@@ -81,13 +81,13 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const key = `room:${roomId}:participants`
     await this.client.hSet(key, userId, JSON.stringify({
       ...userData,
       joinedAt: new Date().toISOString()
     }))
-    
+
     // Set room expiration (24 hours)
     await this.client.expire(key, 24 * 60 * 60)
   }
@@ -96,7 +96,7 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const key = `room:${roomId}:participants`
     await this.client.hDel(key, userId)
   }
@@ -105,10 +105,10 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const key = `room:${roomId}:participants`
     const participants = await this.client.hGetAll(key)
-    
+
     // Parse JSON data for each participant
     const parsedParticipants: Record<string, any> = {}
     for (const [userId, data] of Object.entries(participants)) {
@@ -118,7 +118,7 @@ export class RedisClient {
         logger.error(`Failed to parse participant data for user ${userId}:`, error)
       }
     }
-    
+
     return parsedParticipants
   }
 
@@ -126,7 +126,7 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const key = `room:${roomId}:participants`
     return await this.client.hLen(key)
   }
@@ -135,7 +135,7 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const key = `room:${roomId}:state`
     await this.client.set(key, JSON.stringify({
       ...state,
@@ -147,14 +147,14 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const key = `room:${roomId}:state`
     const state = await this.client.get(key)
-    
+
     if (!state) {
       return null
     }
-    
+
     try {
       return JSON.parse(state)
     } catch (error) {
@@ -167,10 +167,10 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const participantsKey = `room:${roomId}:participants`
     const stateKey = `room:${roomId}:state`
-    
+
     await Promise.all([
       this.client.del(participantsKey),
       this.client.del(stateKey)
@@ -181,7 +181,7 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const keys = await this.client.keys('room:*:participants')
     return keys.map(key => {
       const match = key.match(/^room:(.+):participants$/)
@@ -193,10 +193,10 @@ export class RedisClient {
     if (!this.isConnected) {
       throw new Error('Redis client not connected')
     }
-    
+
     const roomIds = await this.getActiveRooms()
     let cleanedCount = 0
-    
+
     for (const roomId of roomIds) {
       const participantCount = await this.getRoomParticipantCount(roomId)
       if (participantCount === 0) {
@@ -204,7 +204,7 @@ export class RedisClient {
         cleanedCount++
       }
     }
-    
+
     return cleanedCount
   }
 }

@@ -41,10 +41,10 @@ const SessionExitDialog: React.FC<SessionExitDialogProps> = ({
     setAction('leave')
     try {
       await onLeaveSession()
-      onClose()
+      // Don't close dialog here - let the parent component handle navigation
+      // onClose() will be called when the component unmounts or navigation occurs
     } catch (error) {
       console.error('Error leaving session:', error)
-    } finally {
       setIsLoading(false)
       setAction(null)
     }
@@ -55,10 +55,10 @@ const SessionExitDialog: React.FC<SessionExitDialogProps> = ({
     setAction('end')
     try {
       await onEndSession()
-      onClose()
+      // Don't close dialog here - let the parent component handle navigation
+      // onClose() will be called when the component unmounts or navigation occurs
     } catch (error) {
       console.error('Error ending session:', error)
-    } finally {
       setIsLoading(false)
       setAction(null)
     }
@@ -85,80 +85,61 @@ const SessionExitDialog: React.FC<SessionExitDialogProps> = ({
           </Typography>
         </Box>
 
-        {sessionType === 'instant' && isOwner && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This is an instant session. As the creator, leaving will end the session for all participants.
+        {isOwner && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            As the session owner, you can leave (transferring ownership) or end the session for everyone.
           </Alert>
         )}
 
-        {sessionType !== 'instant' && isOwner && (
+        {!isOwner && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            As the session owner, you can end the session for all participants or just leave yourself.
+            You can leave this session anytime and rejoin later if it's still active.
           </Alert>
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* For instant sessions, owner can only end the session */}
-          {sessionType === 'instant' && isOwner ? (
+          {/* Everyone can leave the session */}
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={isLoading && action === 'leave' ? <CircularProgress size={20} /> : <ExitToApp />}
+            onClick={handleLeaveSession}
+            disabled={isLoading}
+            sx={{ justifyContent: 'flex-start', p: 2 }}
+          >
+            <Box sx={{ textAlign: 'left', flex: 1 }}>
+              <Typography variant="subtitle1">
+                Leave Session
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {isOwner 
+                  ? 'Leave the session (ownership will transfer to another participant)'
+                  : 'Exit the session and return to dashboard'
+                }
+              </Typography>
+            </Box>
+          </Button>
+
+          {/* Only current owner can end session for everyone */}
+          {isOwner && (
             <Button
               variant="contained"
               color="warning"
               size="large"
-              startIcon={isLoading && action === 'leave' ? <CircularProgress size={20} /> : <Stop />}
-              onClick={handleLeaveSession}
+              startIcon={isLoading && action === 'end' ? <CircularProgress size={20} /> : <Stop />}
+              onClick={handleEndSession}
               disabled={isLoading}
               sx={{ justifyContent: 'flex-start', p: 2 }}
             >
               <Box sx={{ textAlign: 'left', flex: 1 }}>
                 <Typography variant="subtitle1">
-                  End Instant Session
+                  End Session for Everyone
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  End the session and remove all participants
+                  Close the session and send all participants back to dashboard
                 </Typography>
               </Box>
             </Button>
-          ) : (
-            <>
-              <Button
-                variant="outlined"
-                size="large"
-                startIcon={isLoading && action === 'leave' ? <CircularProgress size={20} /> : <ExitToApp />}
-                onClick={handleLeaveSession}
-                disabled={isLoading}
-                sx={{ justifyContent: 'flex-start', p: 2 }}
-              >
-                <Box sx={{ textAlign: 'left', flex: 1 }}>
-                  <Typography variant="subtitle1">
-                    Leave Session
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Exit the session but keep it running for other participants
-                  </Typography>
-                </Box>
-              </Button>
-
-              {isOwner && (
-                <Button
-                  variant="contained"
-                  color="warning"
-                  size="large"
-                  startIcon={isLoading && action === 'end' ? <CircularProgress size={20} /> : <Stop />}
-                  onClick={handleEndSession}
-                  disabled={isLoading}
-                  sx={{ justifyContent: 'flex-start', p: 2 }}
-                >
-                  <Box sx={{ textAlign: 'left', flex: 1 }}>
-                    <Typography variant="subtitle1">
-                      End Session for All
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                      End the session and remove all participants
-                    </Typography>
-                  </Box>
-                </Button>
-              )}
-            </>
           )}
         </Box>
       </DialogContent>

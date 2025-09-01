@@ -32,9 +32,16 @@ const TextViewerPage: React.FC = () => {
   // Fetch session data if in collaborative mode
   React.useEffect(() => {
     if (isCollaborative && sessionId) {
-      sessionService.getSessionById(sessionId)
-        .then(session => {
-          setSessionData(session)
+      // Fetch both session details and current state (including ownership)
+      Promise.all([
+        sessionService.getSessionById(sessionId),
+        sessionService.getSessionState(sessionId)
+      ])
+        .then(([session, state]) => {
+          setSessionData({
+            ...session,
+            currentState: state
+          })
         })
         .catch(error => {
           console.error('Error fetching session data:', error)
@@ -55,12 +62,8 @@ const TextViewerPage: React.FC = () => {
     if (isExiting) return // Prevent multiple clicks
     
     if (isCollaborative && sessionId) {
-      // For instant sessions, automatically end the session when owner exits
-      if (sessionData?.type === 'instant' && isSessionOwner) {
-        handleEndSession()
-      } else {
-        setExitDialogOpen(true)
-      }
+      // Always show dialog for collaborative sessions (Zoom-like behavior)
+      setExitDialogOpen(true)
     } else {
       navigate('/dashboard')
     }
@@ -71,12 +74,9 @@ const TextViewerPage: React.FC = () => {
     
     setIsExiting(true)
     try {
-      // For instant sessions where user is owner, this will automatically end the session
       await sessionService.leaveSession(sessionId)
       
-      const message = sessionData?.type === 'instant' && isSessionOwner 
-        ? 'Instant session ended successfully' 
-        : 'Left session successfully'
+      const message = 'Left session successfully'
       
       setSnackbar({
         open: true,
@@ -134,8 +134,8 @@ const TextViewerPage: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }))
   }
 
-  // Check if user is session owner
-  const isSessionOwner = sessionData?.havruta?.ownerId === user?.id
+  // Check if user is current session owner (may have been transferred)
+  const isSessionOwner = sessionData?.currentState?.isCurrentUserOwner || sessionData?.havruta?.ownerId === user?.id
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>

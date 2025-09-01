@@ -23,7 +23,19 @@ class SessionService {
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
     }
 
-    return response.json()
+    // Handle empty responses (204 No Content)
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return undefined as T
+    }
+
+    // Check if response has content before parsing JSON
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      return response.json()
+    }
+
+    // For non-JSON responses, return undefined
+    return undefined as T
   }
 
   async getActiveSessions(): Promise<Session[]> {

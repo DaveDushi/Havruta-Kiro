@@ -169,7 +169,14 @@ router.get('/:id/state', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    res.json(state)
+    // Add current user's ownership status
+    const isOwner = await sessionService.isSessionOwner(sessionId, userId)
+    const stateWithOwnership = {
+      ...state,
+      isCurrentUserOwner: isOwner
+    }
+
+    res.json(stateWithOwnership)
   } catch (error) {
     console.error('Error fetching session state:', error)
     const message = error instanceof Error ? error.message : 'Failed to fetch session state'

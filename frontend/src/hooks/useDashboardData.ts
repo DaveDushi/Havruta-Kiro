@@ -96,12 +96,10 @@ export const useDashboardData = (): UseDashboardDataReturn => {
       // Fetch all data in parallel
       const [
         havrutotResponse,
-        activeSessionsResponse,
         upcomingSessionsResponse,
         summaryResponse
       ] = await Promise.all([
         havrutaService.getUserHavrutot({ limit: 50 }).catch(() => ({ havrutot: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } })),
-        sessionService.getActiveSessions().catch(() => []),
         schedulingService.getUpcomingSessions(7).catch((error) => {
           console.error('❌ Failed to fetch upcoming sessions:', error)
           return { sessions: [], dateRange: { start: '', end: '' } }
@@ -110,7 +108,20 @@ export const useDashboardData = (): UseDashboardDataReturn => {
       ])
 
       const havrutot = havrutotResponse.havrutot || []
-      const activeSessions = activeSessionsResponse || []
+      
+      // For each Havruta, check if there's an active session
+      const activeSessionsPromises = havrutot.map(async (havruta) => {
+        try {
+          const activeSession = await sessionService.getActiveSessionForHavruta(havruta.id)
+          return activeSession
+        } catch (error) {
+          // If no active session or error, return null
+          return null
+        }
+      })
+      
+      const activeSessionsResults = await Promise.all(activeSessionsPromises)
+      const activeSessions = activeSessionsResults.filter(session => session !== null) as Session[]
       const rawUpcomingSessions = upcomingSessionsResponse.sessions || []
 
       console.log('📊 Dashboard data fetched:', {
